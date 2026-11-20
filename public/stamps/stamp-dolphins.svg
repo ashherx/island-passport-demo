@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" stroke="#000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+<!-- Placeholder line art for the Island Passport demo. Replaced by generated PNG ink masks. -->
+<defs>
+  <mask id="front" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="240">
+    <rect width="240" height="240" fill="#fff"/>
+    <g transform="translate(70 46) scale(1.28)"><path d="M26 82 C30 58 46 40 62 35 L55 15 C66 19 74 25 79 31 C94 31 106 38 112 49 L127 57 L111 61 C99 64 89 62 80 60 L77 78 C71 72 68 65 68 59 C54 60 41 69 34 88 L43 105 L25 96 L5 94 Z" fill="#000" stroke="#000" stroke-width="9"/></g>
+  </mask>
+</defs>
+<g mask="url(#front)">
+  <g transform="translate(14 22) rotate(-10 60 60) scale(1.02)">
+    <path d="M26 82 C30 58 46 40 62 35 L55 15 C66 19 74 25 79 31 C94 31 106 38 112 49 L127 57 L111 61 C99 64 89 62 80 60 L77 78 C71 72 68 65 68 59 C54 60 41 69 34 88 L43 105 L25 96 L5 94 Z" stroke-width="5.9"/>
+    <circle cx="103" cy="48" r="2.8" fill="#000" stroke="none"/>
+  </g>
+</g>
+<g transform="translate(70 46) scale(1.28)">
+  <path d="M26 82 C30 58 46 40 62 35 L55 15 C66 19 74 25 79 31 C94 31 106 38 112 49 L127 57 L111 61 C99 64 89 62 80 60 L77 78 C71 72 68 65 68 59 C54 60 41 69 34 88 L43 105 L25 96 L5 94 Z" stroke-width="4.7"/>
+  <circle cx="103" cy="48" r="2.5" fill="#000" stroke="none"/>
+  <path d="M50 52 C62 44 78 42 92 44" stroke-width="3.2"/>
+</g>
+<path d="M12 190 q18 -22 36 0 t36 0 t36 0 t36 0 t36 0 t36 0"/>
+<path d="M30 210 q18 -18 36 0 t36 0 t36 0 t36 0 t36 0" stroke-width="4.5"/>
+<path d="M66 228 q18 -16 36 0 t36 0 t36 0" stroke-width="4.5"/>
+<path d="M92 158 l-6 -10 M104 166 l-2 -12 M78 168 l-10 -6 M196 40 q10 -6 12 -18 M206 46 l12 -4" stroke-width="4.5"/>
+<circle cx="72" cy="150" r="3" fill="#000" stroke="none"/>
+<circle cx="110" cy="146" r="3" fill="#000" stroke="none"/>
+</svg>

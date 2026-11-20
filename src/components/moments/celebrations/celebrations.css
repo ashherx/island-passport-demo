@@ -1,0 +1,575 @@
+/*
+ * Styles for the celebration moments (StatusUpgrade, ProvincialAward) and the status chip.
+ * Imported by the components that need it. Everything is prefixed "ipc-" and uses the design
+ * tokens from src/lib/directions.ts. Animations are transform, opacity or (briefly, on small
+ * elements) mask-position.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Status chip                                                         */
+/* ------------------------------------------------------------------ */
+
+.ipc-chip {
+  --chip-pending: var(--ink-pending);
+  --chip-verified: var(--ink-verified);
+  --chip-on: var(--paper);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 13px 0 8px;
+  border-radius: var(--r-chip);
+  color: var(--chip-pending);
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  isolation: isolate;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ipc-chip[data-surface="chrome"] {
+  --chip-pending: var(--status-pending);
+  --chip-verified: var(--status-verified);
+  --chip-on: var(--bg);
+}
+
+/* Hollow dashed outline (pending). */
+.ipc-chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1.5px dashed currentColor;
+  border-radius: inherit;
+  opacity: 0.85;
+  z-index: -2;
+}
+
+/* Solid ink that floods in from the left (verified). */
+.ipc-chip__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--chip-verified);
+  transform: translateX(-101%);
+  z-index: -1;
+}
+
+.ipc-chip__sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.42) 50%, transparent 65%);
+  transform: translateX(-110%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.ipc-chip__icon {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.ipc-chip__clock,
+.ipc-chip__seal {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.ipc-chip__seal {
+  display: block;
+  border-radius: 50%;
+  box-shadow:
+    inset 0 0 0 0.5px var(--foil-lo),
+    0 0.5px 1.5px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: scale(0.3) rotate(-70deg);
+}
+
+.ipc-chip__seal svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  stroke: var(--foil-shadow);
+}
+
+.ipc-chip__labels {
+  position: relative;
+  display: inline-grid;
+  align-items: center;
+  height: 100%;
+}
+
+.ipc-chip__label {
+  grid-area: 1 / 1;
+  line-height: 30px;
+  text-align: left;
+}
+
+.ipc-chip__label[data-for="verified"] {
+  color: var(--chip-on);
+  opacity: 0;
+  transform: translateY(105%);
+}
+
+/* End state */
+.ipc-chip[data-status="verified"] .ipc-chip__fill {
+  transform: none;
+}
+.ipc-chip[data-status="verified"]::before {
+  opacity: 0;
+}
+.ipc-chip[data-status="verified"] .ipc-chip__clock {
+  opacity: 0;
+  transform: scale(0.4) rotate(140deg);
+}
+.ipc-chip[data-status="verified"] .ipc-chip__seal {
+  opacity: 1;
+  transform: none;
+}
+.ipc-chip[data-status="verified"] .ipc-chip__label[data-for="pending"] {
+  opacity: 0;
+  transform: translateY(-105%);
+}
+.ipc-chip[data-status="verified"] .ipc-chip__label[data-for="verified"] {
+  opacity: 1;
+  transform: none;
+}
+.ipc-chip[data-status="verified"] .ipc-chip__sheen {
+  transform: translateX(110%);
+}
+
+/* Transitions (only when animated) */
+.ipc-chip[data-animated] .ipc-chip__fill {
+  transition: transform 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ipc-chip[data-animated]::before {
+  transition: opacity 0.2s linear 0.3s;
+}
+.ipc-chip[data-animated] .ipc-chip__clock {
+  transition:
+    opacity 0.22s linear,
+    transform 0.34s cubic-bezier(0.5, 0, 0.9, 0.4);
+}
+.ipc-chip[data-animated] .ipc-chip__seal {
+  transition:
+    opacity 0.16s linear 0.2s,
+    transform 0.5s cubic-bezier(0.34, 1.56, 0.44, 1) 0.2s;
+}
+.ipc-chip[data-animated] .ipc-chip__label {
+  transition:
+    opacity 0.26s linear 0.06s,
+    transform 0.46s cubic-bezier(0.22, 1, 0.36, 1) 0.06s;
+}
+.ipc-chip[data-animated][data-status="verified"] .ipc-chip__sheen {
+  transition: transform 0.75s cubic-bezier(0.3, 0.1, 0.3, 1) 0.42s;
+}
+
+/* ------------------------------------------------------------------ */
+/* Foil light sweep (shared)                                           */
+/* ------------------------------------------------------------------ */
+
+/* A soft diagonal band that reveals whatever is inside it, travelling left to right. */
+.ipc-sweep {
+  -webkit-mask-image: linear-gradient(112deg, transparent 39%, #000 50%, transparent 61%);
+  mask-image: linear-gradient(112deg, transparent 39%, #000 50%, transparent 61%);
+  -webkit-mask-size: 300% 100%;
+  mask-size: 300% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 100% 0;
+  mask-position: 100% 0;
+  pointer-events: none;
+}
+
+.ipc-sweep[data-run="once"] {
+  animation: ipc-sweep var(--sweep-duration, 0.85s) cubic-bezier(0.35, 0.1, 0.3, 1) var(--sweep-delay, 0s) both;
+}
+
+.ipc-sweep[data-run="loop"] {
+  animation: ipc-sweep-loop 3.8s cubic-bezier(0.35, 0.1, 0.3, 1) var(--sweep-delay, 0s) infinite both;
+}
+
+@keyframes ipc-sweep {
+  from {
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  to {
+    -webkit-mask-position: 0% 0;
+    mask-position: 0% 0;
+  }
+}
+
+@keyframes ipc-sweep-loop {
+  0% {
+    -webkit-mask-position: 100% 0;
+    mask-position: 100% 0;
+  }
+  26%,
+  100% {
+    -webkit-mask-position: 0% 0;
+    mask-position: 0% 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* StatusUpgrade                                                       */
+/* ------------------------------------------------------------------ */
+
+.ipc-upgrade {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.ipc-upgrade__box {
+  position: relative;
+  flex: none;
+  line-height: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ipc-upgrade__layer {
+  position: absolute;
+  inset: 0;
+}
+
+.ipc-upgrade__tilt {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ipc-upgrade__anchor {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.ipc-upgrade__anchor > * {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.ipc-upgrade__shadow {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.22) 55%, rgba(0, 0, 0, 0));
+}
+
+.ipc-upgrade__ring {
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 1.5px var(--foil),
+    0 0 10px 1px var(--foil-hi);
+}
+
+.ipc-upgrade__dent {
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0, 0, 0, 0) 78%, rgba(0, 0, 0, 0.2) 88%, rgba(0, 0, 0, 0) 100%);
+}
+
+.ipc-upgrade__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ */
+/* ProvincialAward                                                     */
+/* ------------------------------------------------------------------ */
+
+.ipc-award {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  color: var(--award-fg);
+  font-family: var(--ff-body);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  outline: none;
+}
+
+.ipc-award__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--award-backdrop);
+}
+
+.ipc-award__rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 170vmin;
+  height: 170vmin;
+  margin: -85vmin 0 0 -85vmin;
+  pointer-events: none;
+}
+
+.ipc-award__rays i {
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, var(--award-ray) 0deg, transparent 5deg, transparent 13deg, var(--award-ray) 18deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 0%, rgba(0, 0, 0, 0.7) 44%, transparent 82%);
+  mask-image: radial-gradient(closest-side, #000 0%, rgba(0, 0, 0, 0.7) 44%, transparent 82%);
+  animation: ipc-spin 70s linear infinite;
+}
+
+@keyframes ipc-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ipc-award__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.ipc-award__stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(56px, env(safe-area-inset-top)) 28px max(28px, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.ipc-award__eyebrow {
+  margin: 0 0 clamp(10px, 2vh, 20px);
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--award-fg-muted);
+}
+
+.ipc-award__eyebrow::before,
+.ipc-award__eyebrow::after {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 1px;
+  margin: 0 12px;
+  vertical-align: middle;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.ipc-award__slot {
+  position: relative;
+  flex: none;
+}
+
+.ipc-award__flyer,
+.ipc-award__rise {
+  position: absolute;
+  inset: 0;
+}
+
+.ipc-award__glow {
+  position: absolute;
+  inset: -55%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--award-glow), transparent);
+  pointer-events: none;
+}
+
+/* The paper medallion the stamp is presented on: a foil rim around a disc of page paper. */
+.ipc-award__medal {
+  position: absolute;
+  inset: -9.5%;
+  border-radius: 50%;
+  padding: 3px;
+  box-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.35),
+    0 34px 60px -22px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.ipc-award__paper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px var(--paper-edge),
+    inset 0 0 26px rgba(0, 0, 0, 0.1);
+}
+
+.ipc-award__paper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--page-dim);
+}
+
+.ipc-award__gloss {
+  position: absolute;
+  inset: -9.5%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.ipc-award__foilhi {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ipc-award__title {
+  margin: clamp(12px, 2.8vh, 26px) 0 0;
+  max-width: 11em;
+  font-size: clamp(30px, 8.6vw, 38px);
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.ipc-award__body {
+  margin: 12px 0 0;
+  max-width: 19em;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--award-fg-muted);
+  text-wrap: balance;
+}
+
+.ipc-award__cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 220px;
+  height: 54px;
+  margin-top: clamp(22px, 4vh, 34px);
+  padding: 0 28px;
+  border: 0;
+  border-radius: var(--r-chip);
+  color: var(--foil-shadow);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  overflow: hidden;
+  touch-action: manipulation;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.22),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 14px 30px -12px rgba(0, 0, 0, 0.7);
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ipc-award__cta:active {
+  transform: scale(0.97);
+}
+
+.ipc-award__cta:focus-visible,
+.ipc-award__skip:focus-visible {
+  outline: 2px solid var(--award-fg);
+  outline-offset: 3px;
+}
+
+.ipc-award__cta-shine {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.ipc-award__cta svg {
+  flex: none;
+}
+
+.ipc-award__skip {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 10px;
+  min-width: 56px;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-chip);
+  background: none;
+  color: var(--award-fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ipc-award__sample {
+  position: absolute;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  padding: 0.15em 0.6em;
+  border: 1px solid var(--award-line);
+  border-radius: var(--r-chip);
+  color: var(--award-fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.14em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+.ipc-award__impact {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion (UX-5)                                               */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .ipc-chip *,
+  .ipc-chip::before {
+    transition: none !important;
+  }
+  .ipc-sweep,
+  .ipc-award__rays i {
+  display: block;
+    animation: none !important;
+  }
+  .ipc-award__cta {
+    transition: none;
+  }
+}

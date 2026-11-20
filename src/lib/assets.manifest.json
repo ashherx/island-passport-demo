@@ -1,0 +1,18 @@
+{
+  "_comment": "Written by scripts/process-stamps.py. Lists generated assets that exist in public/. Safe to edit by hand.",
+  "stamps": [
+    "stamp-chocolate-hills",
+    "stamp-tarsier",
+    "stamp-sea-turtle",
+    "stamp-dolphins",
+    "stamp-mangroves",
+    "stamp-reef",
+    "stamp-provincial"
+  ],
+  "textures": {
+    "tex-cover-navy": "tex-cover-navy.webp",
+    "tex-cover-teal": "tex-cover-teal.webp",
+    "tex-cover-kraft": "tex-cover-kraft.webp",
+    "tex-paper": "tex-paper.webp"
+  }
+}

@@ -1,0 +1,2005 @@
+/*
+ * Passport content: covers, pages, page furniture and the stamp detail sheet.
+ * Owned by the "pages" agent. Imported by the components in this folder.
+ *
+ * Units. Every passport surface is a .ipp-frame, 360 design units wide. `--u` is one unit, so a
+ * surface looks identical at any size. Sizes below are written calc(var(--u) * n).
+ *
+ * Direction. Frames carry data-dir="classic|reef|journal" from React context, so a nested
+ * <DirectionScope> styles correctly (an ancestor selector on [data-direction] would not).
+ * Colours and fonts still come from the token variables.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Frame                                                               */
+/* ------------------------------------------------------------------ */
+
+.ipp-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 360 / 560; /* only used when the parent has no definite height */
+  container-type: inline-size;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: inherit;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.ipp-canvas {
+  position: absolute;
+  inset: 0;
+  --u: var(--u-fallback, 1px);
+}
+
+@supports (width: 1cqw) {
+  .ipp-canvas {
+    --u: calc(100cqw / 360);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Cover                                                               */
+/* ------------------------------------------------------------------ */
+
+.ipp-cover-wrap {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 360 / 560;
+  /* Set --ipp-cover-radius / --ipp-cover-radius-spine on any ancestor to change the corners. */
+  --ipp-r: var(--ipp-cover-radius, var(--r-passport));
+  --ipp-rs: var(--ipp-cover-radius-spine, 4px);
+  --ipp-cover-accent: var(--foil);
+  border-radius: var(--ipp-rs) var(--ipp-r) var(--ipp-r) var(--ipp-rs);
+}
+
+.ipp-cover-wrap[data-face="back"] {
+  border-radius: var(--ipp-r) var(--ipp-rs) var(--ipp-rs) var(--ipp-r);
+}
+
+.ipp-cover {
+  color: var(--cover-ink);
+  font-family: var(--ff-body);
+}
+
+.ipp-cover[data-dir="reef"] {
+  --ipp-cover-accent: #ff9f87;
+}
+
+.ipp-cover__mat,
+.ipp-cover__sheen,
+.ipp-cover__bevel {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Board thickness: a lit top edge and a shaded fore edge and foot. */
+.ipp-cover__bevel {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset -1px 0 0 rgba(255, 255, 255, 0.07),
+    inset 0 calc(var(--u) * -2.2) calc(var(--u) * 1.2) rgba(0, 0, 0, 0.42),
+    inset calc(var(--u) * -2) 0 calc(var(--u) * 1.2) rgba(0, 0, 0, 0.26);
+}
+
+.ipp-cover[data-face="back"] .ipp-cover__bevel {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 1px 0 0 rgba(255, 255, 255, 0.07),
+    inset 0 calc(var(--u) * -2.2) calc(var(--u) * 1.2) rgba(0, 0, 0, 0.42),
+    inset calc(var(--u) * 2) 0 calc(var(--u) * 1.2) rgba(0, 0, 0, 0.26);
+}
+
+/* Hinge: the groove where the board meets the spine. */
+.ipp-cover__spine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--u) * 24);
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.12) 22%,
+    rgba(255, 255, 255, 0.1) 44%,
+    rgba(0, 0, 0, 0.32) 52%,
+    rgba(0, 0, 0, 0.08) 66%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.ipp-cover[data-face="back"] .ipp-cover__spine {
+  left: auto;
+  right: 0;
+  transform: scaleX(-1);
+}
+
+/* A soft highlight that slides with the light. Transform only, so it stays on the compositor. */
+.ipp-cover__specular {
+  position: absolute;
+  inset: -35%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.05) 45%, rgba(255, 255, 255, 0) 72%);
+  transform: translate3d(calc(var(--tx, 0) * 16%), calc(var(--ty, 0) * 12% - 16%), 0);
+  pointer-events: none;
+}
+
+/*
+ * A book that draws its own hinge, edge and lighting can switch the cover's off:
+ * put data-ipp-cover="bare" on any ancestor. The material, foil and artwork stay.
+ */
+[data-ipp-cover="bare"] .ipp-cover__spine,
+[data-ipp-cover="bare"] .ipp-cover__bevel,
+[data-ipp-cover="bare"] .ipp-cover__sheen {
+  display: none;
+}
+
+[data-ipp-cover="bare"] .ipp-cover[data-material="kraft"] .ipp-cover__spine {
+  display: block; /* the cloth tape is part of the Journal cover, not lighting */
+}
+
+/* Foil follows the light: --tx / --ty are written by useCoverLight (Cover.tsx). */
+.ipp-cover .foil-text,
+.ipp-cover .foil-fill {
+  background-position: calc(30% + var(--tx, 0) * 38%) calc(30% + var(--ty, 0) * 30%);
+}
+
+/* Foil frame: a rounded gradient border, cut out of a filled box. */
+.ipp-cover__frame {
+  position: absolute;
+  inset: calc(var(--u) * 15) calc(var(--u) * 15) calc(var(--u) * 15) calc(var(--u) * 29);
+  padding: calc(var(--u) * 1.3);
+  border-radius: calc(var(--u) * 9);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.92;
+  filter: drop-shadow(0 calc(var(--u) * 0.8) 0 rgba(0, 0, 0, 0.4));
+  pointer-events: none;
+}
+
+.ipp-cover__frame--inner {
+  inset: calc(var(--u) * 20) calc(var(--u) * 20) calc(var(--u) * 20) calc(var(--u) * 34);
+  padding: calc(var(--u) * 0.7);
+  border-radius: calc(var(--u) * 5.5);
+  opacity: 0.6;
+  filter: none;
+}
+
+/* Reef: the frame is a line of sand-coloured stitching. */
+.ipp-cover[data-material="linen"] .ipp-cover__frame {
+  inset: calc(var(--u) * 13) calc(var(--u) * 13) calc(var(--u) * 13) calc(var(--u) * 28);
+  padding: 0;
+  border: calc(var(--u) * 1.5) dashed var(--cover-ink);
+  border-radius: calc(var(--u) * 15);
+  background-image: none;
+  -webkit-mask: none;
+  mask: none;
+  opacity: 0.5;
+  filter: drop-shadow(0 calc(var(--u) * 0.9) 0 rgba(0, 0, 0, 0.35));
+}
+
+.ipp-cover[data-material="linen"] .ipp-cover__frame--inner {
+  display: none;
+}
+
+.ipp-cover__body {
+  position: absolute;
+  inset: 0 0 0 calc(var(--u) * 14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(var(--u) * 50) calc(var(--u) * 34) calc(var(--u) * 46);
+  text-align: center;
+}
+
+/* Foil-stamped text: shadow of the impression above, lit edge below, foil on top. */
+.ipp-foil {
+  position: relative;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.ipp-foil::before,
+.ipp-foil::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  -webkit-text-fill-color: currentColor;
+  pointer-events: none;
+}
+
+.ipp-foil::before {
+  color: rgba(0, 0, 0, 0.6);
+  transform: translate(calc(var(--u) * 0.25), calc(var(--u) * 1.15));
+}
+
+.ipp-foil::after {
+  color: rgba(255, 255, 255, 0.26);
+  transform: translate(calc(var(--u) * -0.15), calc(var(--u) * -0.6));
+}
+
+.ipp-foil__ink {
+  position: relative;
+  z-index: 1;
+}
+
+.ipp-cover__eyebrow {
+  font-size: calc(var(--u) * 8.4);
+  font-weight: 600;
+  letter-spacing: 0.36em;
+  margin-right: -0.36em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.ipp-cover__title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: calc(var(--u) * 20);
+  font-size: calc(var(--u) * 41);
+  line-height: 1.1;
+  letter-spacing: 0.17em;
+  margin-right: -0.17em;
+  text-transform: uppercase;
+}
+
+.ipp-cover__emblem {
+  margin: auto;
+}
+
+.ipp-cover__subtitle {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 10);
+  font-size: calc(var(--u) * 9.4);
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.ipp-cover__subtitle .ipp-foil {
+  margin-right: -0.3em;
+}
+
+.ipp-cover__orn {
+  width: calc(var(--u) * 4.6);
+  height: calc(var(--u) * 4.6);
+  transform: rotate(45deg);
+  box-shadow: calc(var(--u) * 0.6) calc(var(--u) * 0.6) 0 rgba(0, 0, 0, 0.45);
+}
+
+.ipp-cover__province {
+  margin-top: calc(var(--u) * 11);
+  font-size: calc(var(--u) * 21);
+  letter-spacing: 0.34em;
+  margin-right: -0.34em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* Reef: friendlier setting, coral print for the small lines. */
+.ipp-cover[data-dir="reef"] .ipp-cover__title {
+  margin-top: calc(var(--u) * 16);
+  font-size: calc(var(--u) * 48);
+  line-height: 0.98;
+  letter-spacing: -0.015em;
+  margin-right: 0;
+  text-transform: none;
+}
+
+.ipp-cover[data-dir="reef"] .ipp-cover__eyebrow .ipp-foil__ink,
+.ipp-cover[data-dir="reef"] .ipp-cover__subtitle .ipp-foil__ink {
+  background-image: none;
+  -webkit-text-fill-color: var(--ipp-cover-accent);
+  color: var(--ipp-cover-accent);
+}
+
+.ipp-cover[data-dir="reef"] .ipp-cover__eyebrow .ipp-foil::after,
+.ipp-cover[data-dir="reef"] .ipp-cover__subtitle .ipp-foil::after {
+  display: none;
+}
+
+.ipp-cover[data-dir="reef"] .ipp-cover__orn {
+  border-radius: 50%;
+  background-image: none;
+  background-color: var(--ipp-cover-accent);
+}
+
+.ipp-cover[data-dir="reef"] .ipp-cover__province {
+  font-size: calc(var(--u) * 24);
+  letter-spacing: 0.02em;
+  margin-right: 0;
+  text-transform: none;
+}
+
+/* Emblem: three masked layers. */
+.ipp-emblem {
+  position: relative;
+  display: block;
+  flex: none;
+  width: calc(var(--u) * 166);
+  height: calc(var(--u) * 166);
+}
+
+.ipp-emblem i {
+  position: absolute;
+  inset: 0;
+  -webkit-mask: var(--ipp-emblem) center / contain no-repeat;
+  mask: var(--ipp-emblem) center / contain no-repeat;
+}
+
+.ipp-emblem__lo {
+  background: rgba(0, 0, 0, 0.62);
+  transform: translate(calc(var(--u) * 0.4), calc(var(--u) * 1.4));
+}
+
+.ipp-emblem__hi {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translate(calc(var(--u) * -0.2), calc(var(--u) * -0.7));
+}
+
+.ipp-emblem[data-variant="blind"] .ipp-emblem__lo {
+  background: rgba(0, 0, 0, 0.5);
+  transform: translate(0, calc(var(--u) * -0.9));
+}
+
+.ipp-emblem[data-variant="blind"] .ipp-emblem__hi {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translate(0, calc(var(--u) * 0.9));
+}
+
+.ipp-emblem[data-variant="ink"] .ipp-emblem__lo {
+  display: none;
+}
+
+.ipp-emblem[data-variant="ink"] .ipp-emblem__hi {
+  background: rgba(255, 255, 255, 0.24);
+  transform: translate(0, calc(var(--u) * 0.8));
+}
+
+.ipp-emblem[data-variant="ink"] .ipp-emblem__face {
+  background: var(--cover-ink);
+  opacity: 0.86;
+}
+
+/* --- Journal: cloth tape, pasted label, inked emblem ---------------- */
+
+.ipp-cover[data-material="kraft"] .ipp-cover__spine {
+  width: calc(var(--u) * 36);
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.055) 0 1px, rgba(0, 0, 0, 0) 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, rgba(0, 0, 0, 0) 1px 3px),
+    linear-gradient(90deg, #171310 0%, #2b2520 55%, #201b17 100%);
+  box-shadow:
+    1px 0 0 rgba(255, 255, 255, 0.1),
+    calc(var(--u) * 2) 0 calc(var(--u) * 4) rgba(0, 0, 0, 0.3);
+}
+
+.ipp-cover__body--print {
+  inset: 0 0 0 calc(var(--u) * 36);
+  align-items: stretch;
+  padding: calc(var(--u) * 40) calc(var(--u) * 26) calc(var(--u) * 26) calc(var(--u) * 24);
+  text-align: left;
+  color: var(--cover-ink);
+}
+
+.ipp-label {
+  position: relative;
+  padding: calc(var(--u) * 15) calc(var(--u) * 16) calc(var(--u) * 14);
+  border-radius: calc(var(--u) * 3);
+  background: var(--paper);
+  color: var(--paper-ink);
+  box-shadow:
+    0 calc(var(--u) * 0.6) calc(var(--u) * 1.2) rgba(0, 0, 0, 0.28),
+    0 calc(var(--u) * 5) calc(var(--u) * 10) calc(var(--u) * -6) rgba(0, 0, 0, 0.4),
+    inset 0 0 0 calc(var(--u) * 4) var(--paper),
+    inset 0 0 0 calc(var(--u) * 5.1) var(--paper-ink);
+  transform: rotate(-0.7deg);
+}
+
+.ipp-label__top {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 6.8);
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-ink-muted);
+}
+
+.ipp-label__title {
+  display: flex;
+  flex-direction: column;
+  margin-top: calc(var(--u) * 9);
+  font-size: calc(var(--u) * 47);
+  font-weight: 800;
+  line-height: 0.9;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.ipp-label__sub {
+  margin-top: calc(var(--u) * 9);
+  padding-bottom: calc(var(--u) * 9);
+  border-bottom: calc(var(--u) * 1.4) solid var(--paper-ink);
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 8.2);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.ipp-label__line {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 8);
+  margin-top: calc(var(--u) * 9);
+}
+
+.ipp-label__line span {
+  flex: none;
+  width: calc(var(--u) * 50);
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 6.4);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--paper-ink-muted);
+}
+
+.ipp-label__line b {
+  flex: 1;
+  padding-bottom: calc(var(--u) * 1.5);
+  border-bottom: calc(var(--u) * 0.7) solid rgba(0, 0, 0, 0.32);
+  font-family: var(--ff-stamp);
+  font-size: calc(var(--u) * 12.5);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--ink-discovery);
+}
+
+.ipp-cover__body--print .ipp-cover__emblem {
+  width: calc(var(--u) * 132);
+  height: calc(var(--u) * 132);
+  margin: auto calc(var(--u) * 6) calc(var(--u) * 20) auto;
+  transform: rotate(-8deg);
+}
+
+.ipp-cover__imprint {
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 7);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.74;
+  text-shadow: 0 calc(var(--u) * 0.7) 0 rgba(255, 255, 255, 0.16);
+}
+
+/* --- Back cover ----------------------------------------------------- */
+
+.ipp-cover__body--back {
+  inset: 0 calc(var(--u) * 14) 0 0;
+  padding: calc(var(--u) * 50) calc(var(--u) * 40) calc(var(--u) * 34);
+}
+
+.ipp-cover__body--back .ipp-cover__emblem {
+  width: calc(var(--u) * 104);
+  height: calc(var(--u) * 104);
+  margin: auto auto calc(var(--u) * 26);
+}
+
+.ipp-cover[data-material="kraft"] .ipp-cover__body--back {
+  inset: 0 calc(var(--u) * 36) 0 0;
+}
+
+.ipp-cover__backline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 5);
+  font-size: calc(var(--u) * 9.2);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.ipp-cover__printed {
+  font-family: var(--ff-mono);
+  opacity: 0.82;
+  text-shadow: 0 calc(var(--u) * 0.7) 0 rgba(255, 255, 255, 0.16);
+}
+
+.ipp-cover__credit {
+  margin-top: calc(var(--u) * 9);
+  margin-bottom: auto;
+  font-size: calc(var(--u) * 9.4);
+  line-height: 1.45;
+  opacity: 0.62;
+}
+
+.ipp-cover__notice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 7);
+  max-width: calc(var(--u) * 232);
+  font-size: calc(var(--u) * 7.4);
+  line-height: 1.5;
+  opacity: 0.6;
+}
+
+.ipp-cover__sample {
+  padding: calc(var(--u) * 2) calc(var(--u) * 7);
+  border: calc(var(--u) * 0.8) solid currentColor;
+  border-radius: var(--r-chip);
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 6.6);
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  margin-right: -0.2em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+/* --- Page block peeking past the cover (standalone covers only) ----- */
+
+.ipp-cover__block {
+  position: absolute;
+  top: 1.4%;
+  bottom: -1%;
+  left: 3%;
+  right: -1.3%;
+  border-radius: 2px calc(var(--ipp-r) * 0.8) calc(var(--ipp-r) * 0.8) 2px;
+  background:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.11) 0 1px, rgba(0, 0, 0, 0) 1px 2px),
+    linear-gradient(180deg, var(--paper), var(--paper-shade));
+  box-shadow:
+    inset 0 0 0 1px var(--paper-edge),
+    0 0 0 1px var(--cover-edge),
+    1.5px 2px 0 1px var(--cover-deep);
+  pointer-events: none;
+}
+
+.ipp-cover-wrap[data-face="back"] .ipp-cover__block {
+  left: -1.3%;
+  right: 3%;
+  border-radius: calc(var(--ipp-r) * 0.8) 2px 2px calc(var(--ipp-r) * 0.8);
+}
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
+.ipp-page {
+  font-family: var(--ff-body);
+  color: var(--paper-ink);
+  /* Ink for small print on paper: the muted ink at full strength is easier to read than opacity. */
+  --ipp-rule-ink: var(--paper-line);
+}
+
+.ipp-page > .ipp-canvas {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * 17) calc(var(--u) * 22) calc(var(--u) * 12) calc(var(--u) * 26);
+}
+
+.ipp-page[data-side="left"] > .ipp-canvas {
+  padding-left: calc(var(--u) * 22);
+  padding-right: calc(var(--u) * 26);
+}
+
+.ipp-page__deco,
+.ipp-page__dim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ipp-page__deco {
+  z-index: 0;
+}
+
+.ipp-page__dim {
+  z-index: 4;
+}
+
+.ipp-page__head,
+.ipp-page__rule,
+.ipp-page__body,
+.ipp-page__foot {
+  position: relative;
+  z-index: 1;
+}
+
+/* Shade toward the binding. */
+.ipp-page__gutter {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(var(--u) * 30);
+  background: linear-gradient(90deg, rgba(40, 28, 10, 0.2) 0%, rgba(40, 28, 10, 0.07) 28%, rgba(40, 28, 10, 0) 100%);
+  pointer-events: none;
+}
+
+.ipp-page[data-side="left"] .ipp-page__gutter {
+  left: auto;
+  right: 0;
+  transform: scaleX(-1);
+}
+
+.ipp-page__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: calc(var(--u) * 12);
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 7.2);
+  font-weight: 500;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: var(--paper-ink-muted);
+  white-space: nowrap;
+}
+
+.ipp-page__head-left {
+  color: var(--paper-ink);
+}
+
+.ipp-page__rule {
+  margin-top: calc(var(--u) * 6);
+  overflow: hidden;
+}
+
+.ipp-page__micro {
+  display: none;
+}
+
+.ipp-page__body {
+  flex: 1;
+  min-height: 0;
+  padding-top: calc(var(--u) * 13);
+}
+
+.ipp-page__foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: calc(var(--u) * 10);
+  line-height: 1;
+}
+
+.ipp-page[data-side="left"] .ipp-page__serial {
+  order: 3;
+  justify-self: end;
+}
+
+.ipp-page[data-side="left"] .ipp-page__number {
+  order: 1;
+  justify-self: start;
+}
+
+/* Passport number, perforated: the digits are punched out of a field of dots. */
+.ipp-page__serial {
+  justify-self: start;
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 11.5);
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--paper-ink);
+  background-image: radial-gradient(circle, currentColor 0 44%, rgba(0, 0, 0, 0) 52%);
+  background-size: calc(var(--u) * 1.5) calc(var(--u) * 1.5);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  opacity: 0.85;
+}
+
+.ipp-page__sample {
+  padding: calc(var(--u) * 1.6) calc(var(--u) * 6);
+  border: calc(var(--u) * 0.7) solid var(--paper-edge);
+  border-radius: var(--r-chip);
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 5.8);
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  text-transform: uppercase;
+  color: var(--paper-ink-muted);
+}
+
+.ipp-page__number {
+  justify-self: end;
+  font-family: var(--ff-display);
+  font-weight: var(--display-weight);
+  font-size: calc(var(--u) * 15);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--paper-ink);
+}
+
+/* --- Classic: guilloche ribbon, microprint line, rosette watermark --- */
+
+.ipp-page[data-dir="classic"] .ipp-page__rule {
+  height: calc(var(--u) * 13.5);
+  background: var(--ipp-rule) left top / calc(var(--u) * 64) calc(var(--u) * 8) repeat-x;
+}
+
+.ipp-page[data-dir="classic"] .ipp-page__micro {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: block;
+  font-family: var(--ff-body);
+  font-size: calc(var(--u) * 3.3);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--paper-line);
+  opacity: 0.6;
+}
+
+.ipp-page[data-dir="classic"] .ipp-page__deco {
+  background: var(--ipp-watermark) 50% 71% / calc(var(--u) * 348) no-repeat;
+}
+
+.ipp-page[data-dir="classic"][data-page-kind="holder"] .ipp-page__deco {
+  background-position: 128% 62%;
+  background-size: calc(var(--u) * 300);
+}
+
+.ipp-page[data-dir="classic"][data-page-kind="province"] .ipp-page__deco {
+  background-position: 50% 26%;
+  background-size: calc(var(--u) * 300);
+}
+
+.ipp-page[data-dir="classic"][data-page-kind="provincial"] .ipp-page__deco {
+  background-image: none;
+}
+
+/* --- Reef: wave rule, depth contours -------------------------------- */
+
+.ipp-page[data-dir="reef"] .ipp-page__rule {
+  height: calc(var(--u) * 9);
+  background: var(--ipp-rule) left center / calc(var(--u) * 28) calc(var(--u) * 9) repeat-x;
+}
+
+.ipp-page[data-dir="reef"] .ipp-page__deco {
+  background: var(--ipp-watermark) right bottom / cover no-repeat;
+}
+
+.ipp-page[data-dir="reef"] .ipp-page__number {
+  font-size: calc(var(--u) * 14);
+}
+
+/* --- Journal: ruler edge, margin line ------------------------------- */
+
+.ipp-page[data-dir="journal"] .ipp-page__rule {
+  height: calc(var(--u) * 9);
+  border-top: calc(var(--u) * 1.2) solid var(--paper-ink);
+  background: var(--ipp-rule) left top / calc(var(--u) * 50) calc(var(--u) * 9) repeat-x;
+}
+
+.ipp-page[data-dir="journal"] .ipp-page__deco {
+  background: linear-gradient(var(--ink-pending), var(--ink-pending)) calc(var(--u) * 14.5) 0 / calc(var(--u) * 0.8) 100% no-repeat;
+  opacity: 0.42;
+}
+
+.ipp-page[data-dir="journal"][data-side="left"] .ipp-page__deco {
+  background-position: calc(100% - var(--u) * 14.5) 0;
+}
+
+.ipp-page[data-dir="journal"] .ipp-page__number {
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 11.5);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shared small type                                                   */
+/* ------------------------------------------------------------------ */
+
+.ipp-holder dt,
+.ipp-pledge__label,
+.ipp-sign__label,
+.ipp-province__label,
+.ipp-province__chart figcaption,
+.ipp-key__label,
+.ipp-island__meta,
+.ipp-island__priority-label,
+.ipp-provincial__label {
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 6.8);
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--paper-ink-muted);
+}
+
+/* Zero specificity, so any class below can set its own margins. */
+:where(.ipp-page) :where(h2, p, dl, dd, ol, ul, figure) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Holder page                                                         */
+/* ------------------------------------------------------------------ */
+
+.ipp-holder {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ipp-holder__id {
+  display: flex;
+  gap: calc(var(--u) * 16);
+  align-items: stretch;
+}
+
+.ipp-portrait {
+  position: relative;
+  flex: none;
+  width: calc(var(--u) * 104);
+  height: calc(var(--u) * 132);
+  border-radius: calc(var(--u) * 5);
+  background: var(--paper-shade);
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.8) var(--paper-ink-muted),
+    inset 0 0 0 calc(var(--u) * 3) var(--paper),
+    inset 0 0 0 calc(var(--u) * 3.5) var(--paper-edge);
+  display: grid;
+  place-items: center;
+}
+
+.ipp-portrait__pattern {
+  position: absolute;
+  inset: calc(var(--u) * 4);
+  border-radius: calc(var(--u) * 2);
+  /* The page watermark again, at portrait scale. Two layers, so it prints a little stronger. */
+  background:
+    var(--ipp-watermark) center / calc(var(--u) * 170) no-repeat,
+    var(--ipp-watermark) center / calc(var(--u) * 170) no-repeat;
+  overflow: hidden;
+}
+
+/* Journal: pencil hatching instead of a printed pattern. */
+.ipp-page[data-dir="journal"] .ipp-portrait__pattern {
+  background: repeating-linear-gradient(
+    -52deg,
+    rgba(42, 38, 32, 0.1) 0,
+    rgba(42, 38, 32, 0.1) calc(var(--u) * 0.6),
+    rgba(42, 38, 32, 0) calc(var(--u) * 0.6),
+    rgba(42, 38, 32, 0) calc(var(--u) * 4.2)
+  );
+}
+
+.ipp-page[data-dir="reef"] .ipp-portrait__pattern {
+  background: var(--ipp-watermark) right bottom / cover no-repeat;
+}
+
+.ipp-portrait__mono {
+  position: relative;
+  font-size: calc(var(--u) * 50);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--paper-ink);
+}
+
+/* A small foil emblem tacked to the corner of the portrait. */
+.ipp-portrait__corner {
+  position: absolute;
+  right: calc(var(--u) * -9);
+  bottom: calc(var(--u) * -9);
+  width: calc(var(--u) * 38);
+  height: calc(var(--u) * 38);
+  border-radius: 50%;
+  background: var(--foil-gradient) 30% 30% / 220% 220%;
+  box-shadow:
+    0 calc(var(--u) * 1) calc(var(--u) * 2) rgba(0, 0, 0, 0.28),
+    inset 0 0 0 calc(var(--u) * 0.6) var(--foil-hi),
+    inset 0 0 0 calc(var(--u) * 1.2) var(--foil-lo);
+}
+
+.ipp-portrait__corner::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--u) * 3.5);
+  background: var(--foil-shadow);
+  -webkit-mask: var(--ipp-emblem) center / contain no-repeat;
+  mask: var(--ipp-emblem) center / contain no-repeat;
+  opacity: 0.85;
+}
+
+.ipp-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ipp-field dd {
+  margin-top: calc(var(--u) * 2.5);
+  font-size: calc(var(--u) * 12);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--paper-ink);
+}
+
+.ipp-field--name dd {
+  font-size: calc(var(--u) * 27);
+  font-weight: var(--display-weight);
+  line-height: 1;
+}
+
+.ipp-field dd.ipp-field__mono {
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 11);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.ipp-fields--row {
+  flex: none;
+  flex-direction: row;
+  gap: calc(var(--u) * 14);
+  margin-top: calc(var(--u) * 20);
+  padding: calc(var(--u) * 11) 0;
+  border-top: calc(var(--u) * 0.7) solid var(--paper-edge);
+  border-bottom: calc(var(--u) * 0.7) solid var(--paper-edge);
+}
+
+.ipp-fields--row .ipp-field:nth-child(2) {
+  flex: 1;
+}
+
+.ipp-pledge {
+  margin-top: calc(var(--u) * 18);
+  max-width: calc(var(--u) * 252);
+}
+
+.ipp-pledge__text {
+  margin-top: calc(var(--u) * 5);
+  font-size: calc(var(--u) * 11.4);
+  line-height: 1.45;
+}
+
+.ipp-page[data-dir="classic"] .ipp-pledge__text {
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: calc(var(--u) * 15.6);
+  line-height: 1.24;
+}
+
+.ipp-page[data-dir="journal"] .ipp-pledge__text {
+  font-family: var(--ff-stamp);
+  font-size: calc(var(--u) * 11);
+  line-height: 1.5;
+  color: var(--ink-discovery);
+}
+
+.ipp-sign {
+  display: flex;
+  flex-direction: column;
+  margin-top: calc(var(--u) * 10);
+  width: calc(var(--u) * 152);
+}
+
+.ipp-sign__ink {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.ipp-sign__ink path {
+  fill: none;
+  stroke: var(--ink-discovery);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ipp-sign__ink path:last-child {
+  stroke-width: 0.7;
+  opacity: 0.7;
+}
+
+.ipp-sign__label {
+  margin-top: calc(var(--u) * 2);
+  padding-top: calc(var(--u) * 4);
+  border-top: calc(var(--u) * 0.7) solid var(--paper-edge);
+}
+
+/* "Sample" overprint (PUB-7). */
+.ipp-specimen {
+  position: absolute;
+  right: calc(var(--u) * -2);
+  bottom: calc(var(--u) * 88);
+  padding: calc(var(--u) * 4) calc(var(--u) * 10) calc(var(--u) * 3);
+  border: calc(var(--u) * 1.6) solid currentColor;
+  border-radius: calc(var(--u) * 4);
+  font-family: var(--ff-stamp);
+  font-size: calc(var(--u) * 21);
+  font-weight: var(--stamp-weight);
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--ink-pending);
+  opacity: 0.6;
+  transform: rotate(-13deg);
+}
+
+.ipp-mrz {
+  display: flex;
+  flex-direction: column;
+  margin: auto calc(var(--u) * -22) calc(var(--u) * 8) calc(var(--u) * -26);
+  padding: calc(var(--u) * 9) calc(var(--u) * 22) calc(var(--u) * 8) calc(var(--u) * 26);
+  border-top: calc(var(--u) * 0.7) solid var(--paper-edge);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.12));
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 10.3);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  line-height: 1.55;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--paper-ink);
+}
+
+/* ------------------------------------------------------------------ */
+/* Chart                                                               */
+/* ------------------------------------------------------------------ */
+
+.ipp-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.ipp-chart__land {
+  fill: var(--paper-line);
+  fill-opacity: 0.13;
+  stroke: var(--paper-ink);
+  stroke-width: 1.1;
+  stroke-linejoin: round;
+}
+
+.ipp-chart__reef {
+  fill: none;
+  stroke: var(--paper-line);
+  stroke-width: 1.5;
+  stroke-dasharray: 0.1 3.6;
+  stroke-linecap: round;
+}
+
+.ipp-chart__pin {
+  fill: var(--paper-ink);
+  stroke: var(--paper);
+  stroke-width: 1.2;
+}
+
+.ipp-chart__num {
+  fill: var(--paper);
+  font-family: var(--ff-mono);
+  font-size: 7.4px;
+  font-weight: 600;
+}
+
+.ipp-chart__label {
+  fill: var(--paper-ink);
+  font-family: var(--ff-body);
+  font-size: 8.4px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  paint-order: stroke;
+  stroke: var(--paper);
+  stroke-width: 2.6px;
+  stroke-linejoin: round;
+}
+
+.ipp-chart__dot {
+  fill: var(--paper-ink);
+  opacity: 0.32;
+}
+
+.ipp-chart[data-locator] .ipp-chart__land {
+  stroke-width: 2;
+  stroke: var(--paper-ink);
+  fill-opacity: 0.16;
+}
+
+.ipp-chart[data-locator] .ipp-chart__reef {
+  stroke-width: 2.2;
+  stroke-dasharray: 0.1 5;
+}
+
+.ipp-chart[data-locator] .ipp-chart__pin {
+  fill: var(--ink-pending);
+  stroke-width: 2.4;
+}
+
+.ipp-chart__halo {
+  fill: var(--ink-pending);
+  fill-opacity: 0.16;
+  stroke: var(--ink-pending);
+  stroke-width: 1.6;
+  stroke-dasharray: 3.2 3.2;
+}
+
+/* ------------------------------------------------------------------ */
+/* Province page                                                       */
+/* ------------------------------------------------------------------ */
+
+.ipp-province {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ipp-province__title {
+  display: flex;
+  flex-direction: column;
+}
+
+.ipp-province__name {
+  margin-top: calc(var(--u) * 1);
+  font-size: calc(var(--u) * 58);
+  line-height: 0.95;
+}
+
+.ipp-page[data-dir="reef"] .ipp-province__name {
+  font-size: calc(var(--u) * 52);
+}
+
+.ipp-page[data-dir="journal"] .ipp-province__name {
+  font-size: calc(var(--u) * 54);
+  text-transform: uppercase;
+  line-height: 0.92;
+}
+
+.ipp-province__chart {
+  position: relative;
+  width: calc(var(--u) * 256);
+  margin: auto;
+}
+
+.ipp-province__chart figcaption {
+  position: absolute;
+  right: calc(var(--u) * -26);
+  bottom: calc(var(--u) * 4);
+  width: calc(var(--u) * 74);
+  font-size: calc(var(--u) * 5.6);
+  line-height: 1.4;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.ipp-index {
+  flex: none;
+}
+
+.ipp-index__row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 8);
+  height: calc(var(--u) * 23);
+}
+
+.ipp-index__num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 13.5);
+  height: calc(var(--u) * 13.5);
+  border-radius: 50%;
+  background: var(--paper-ink);
+  color: var(--paper);
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 7.6);
+  font-weight: 600;
+  line-height: 1;
+}
+
+.ipp-index__name {
+  font-family: var(--ff-display);
+  font-weight: var(--display-weight);
+  font-variation-settings: var(--display-variation);
+  font-size: calc(var(--u) * 17.5);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ipp-page[data-dir="reef"] .ipp-index__name,
+.ipp-page[data-dir="journal"] .ipp-index__name {
+  font-size: calc(var(--u) * 14.5);
+}
+
+.ipp-index__leader {
+  flex: 1;
+  align-self: flex-end;
+  margin-bottom: calc(var(--u) * 6);
+  border-bottom: calc(var(--u) * 1) dotted var(--paper-ink-muted);
+  opacity: 0.55;
+  order: 2;
+}
+
+.ipp-index__dots {
+  display: flex;
+  gap: calc(var(--u) * 3.5);
+  order: 3;
+}
+
+.ipp-index__page {
+  order: 4;
+  width: calc(var(--u) * 18);
+  text-align: right;
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 9);
+  font-weight: 500;
+  color: var(--paper-ink-muted);
+}
+
+/* The status mark in miniature: outline, dashed, solid with a foil centre (STM-7). */
+.ipp-dot {
+  flex: none;
+  display: block;
+  box-sizing: border-box;
+  width: calc(var(--u) * 10);
+  height: calc(var(--u) * 10);
+  border-radius: 50%;
+}
+
+.ipp-dot[data-status="empty"] {
+  border: calc(var(--u) * 0.9) dashed var(--ink-empty);
+  opacity: 0.85;
+}
+
+.ipp-dot[data-status="discovery"] {
+  border: calc(var(--u) * 1.7) solid var(--ink-discovery);
+}
+
+.ipp-dot[data-status="pending"] {
+  border: calc(var(--u) * 1.6) dashed var(--ink-pending);
+  background: radial-gradient(circle, var(--ink-pending) 0 24%, rgba(0, 0, 0, 0) 30%);
+}
+
+.ipp-dot[data-status="verified"] {
+  background: radial-gradient(circle, var(--foil-hi) 0 22%, var(--foil) 23% 36%, var(--ink-verified) 40%);
+}
+
+.ipp-key {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 12);
+  margin-top: calc(var(--u) * 11);
+  margin-bottom: calc(var(--u) * 9);
+  padding-top: calc(var(--u) * 9);
+  border-top: calc(var(--u) * 0.7) solid var(--paper-edge);
+}
+
+.ipp-key__label {
+  flex: none;
+}
+
+.ipp-key__list {
+  display: flex;
+  flex: 1;
+  justify-content: space-between;
+  gap: calc(var(--u) * 8);
+}
+
+.ipp-key__list li {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 4.5);
+  font-size: calc(var(--u) * 8.3);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ipp-key__list li[data-status="discovery"] {
+  color: var(--ink-discovery);
+}
+
+.ipp-key__list li[data-status="pending"] {
+  color: var(--ink-pending);
+}
+
+.ipp-key__list li[data-status="verified"] {
+  color: var(--ink-verified);
+}
+
+/* ------------------------------------------------------------------ */
+/* Island page                                                         */
+/* ------------------------------------------------------------------ */
+
+.ipp-island {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ipp-island__top,
+.ipp-island__priority {
+  flex: none;
+}
+
+.ipp-island__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(var(--u) * 10);
+}
+
+.ipp-island__heading {
+  min-width: 0;
+}
+
+.ipp-island__name {
+  font-size: calc(var(--u) * 41);
+  line-height: 0.96;
+  white-space: nowrap;
+}
+
+.ipp-page[data-dir="reef"] .ipp-island__name {
+  font-size: calc(var(--u) * 34);
+  line-height: 1.02;
+}
+
+.ipp-page[data-dir="journal"] .ipp-island__name {
+  font-size: calc(var(--u) * 35);
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.ipp-island__name[data-long] {
+  font-size: calc(var(--u) * 35);
+  line-height: 1.12;
+}
+
+.ipp-page[data-dir="reef"] .ipp-island__name[data-long],
+.ipp-page[data-dir="journal"] .ipp-island__name[data-long] {
+  font-size: calc(var(--u) * 30);
+  line-height: 1.14;
+}
+
+.ipp-island__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 2) calc(var(--u) * 10);
+  margin-top: calc(var(--u) * 7);
+}
+
+.ipp-island__coords {
+  opacity: 0.8;
+}
+
+.ipp-island__locator {
+  flex: none;
+  width: calc(var(--u) * 92);
+  margin-top: calc(var(--u) * 1);
+}
+
+.ipp-island__blurb {
+  margin-top: calc(var(--u) * 10);
+  max-width: calc(var(--u) * 290);
+  font-size: calc(var(--u) * 10.6);
+  line-height: 1.42;
+  flex: none;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.ipp-page[data-dir="classic"] .ipp-island__blurb {
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: calc(var(--u) * 14.2);
+  line-height: 1.2;
+}
+
+.ipp-page[data-dir="journal"] .ipp-island__blurb {
+  font-family: var(--ff-stamp);
+  font-size: calc(var(--u) * 10.4);
+  line-height: 1.5;
+  color: var(--ink-discovery);
+}
+
+.ipp-island__priority {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--u) * 9);
+  margin-top: calc(var(--u) * 9);
+  padding-top: calc(var(--u) * 7);
+  border-top: calc(var(--u) * 0.7) solid var(--paper-edge);
+}
+
+.ipp-island__priority-label {
+  flex: none;
+}
+
+.ipp-island__priority-value {
+  font-size: calc(var(--u) * 9.6);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ipp-stamps {
+  position: relative;
+  flex: none;
+  margin-top: auto;
+  margin-bottom: calc(var(--u) * 2);
+}
+
+.ipp-slot {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--u) * 14);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: center;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button.ipp-slot,
+button.ipp-ornate__stamp {
+  cursor: pointer;
+  transition: transform 0.32s var(--ease-spring);
+}
+
+button.ipp-slot:active,
+button.ipp-ornate__stamp:active {
+  transform: scale(0.955);
+  transition-duration: 0.09s;
+}
+
+@media (hover: hover) {
+  button.ipp-slot:hover,
+  button.ipp-ornate__stamp:hover {
+    transform: translateY(calc(var(--u) * -2)) scale(1.02);
+  }
+}
+
+button.ipp-slot:focus-visible,
+button.ipp-ornate__stamp:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: calc(var(--u) * 3);
+}
+
+.ipp-slot__stamp {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.ipp-slot__caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 2.5);
+  margin-top: calc(var(--u) * 5);
+  line-height: 1;
+}
+
+/* Wide shapes leave air under the impression: bring the caption up to it. */
+.ipp-slot[data-shape="rounded"] .ipp-slot__caption {
+  margin-top: calc(var(--u) * (5 - var(--slot, 120) * 0.1));
+}
+
+.ipp-slot[data-shape="oval"] .ipp-slot__caption {
+  margin-top: calc(var(--u) * (5 - var(--slot, 120) * 0.08));
+}
+
+.ipp-slot__title {
+  font-family: var(--ff-mono);
+  font-size: calc(var(--u) * 6.9);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--paper-ink);
+}
+
+.ipp-slot[data-slot-status="empty"] .ipp-slot__title {
+  color: var(--paper-ink-muted);
+}
+
+.ipp-slot__status {
+  font-size: calc(var(--u) * 8.4);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ipp-slot__status[data-status="discovery"] {
+  color: var(--ink-discovery);
+}
+
+.ipp-slot__status[data-status="pending"] {
+  color: var(--ink-pending);
+}
+
+.ipp-slot__status[data-status="verified"] {
+  color: var(--ink-verified);
+}
+
+/* A just-earned stamp: a soft ring breathing around it. */
+.ipp-slot[data-highlight] .ipp-slot__stamp::after,
+.ipp-ornate[data-highlight]::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--u) * -5);
+  border-radius: 50%;
+  border: calc(var(--u) * 1.4) solid var(--foil);
+  opacity: 0;
+  animation: ipp-halo 2.2s var(--ease-out-soft) infinite;
+  pointer-events: none;
+}
+
+@keyframes ipp-halo {
+  0% {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1.12);
+    opacity: 0;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Provincial Stamp page                                               */
+/* ------------------------------------------------------------------ */
+
+.ipp-provincial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  text-align: center;
+}
+
+.ipp-provincial__title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.ipp-provincial__name {
+  margin-top: calc(var(--u) * 3);
+  font-size: calc(var(--u) * 35);
+  line-height: 1;
+}
+
+.ipp-page[data-dir="reef"] .ipp-provincial__name {
+  font-size: calc(var(--u) * 31);
+}
+
+.ipp-page[data-dir="journal"] .ipp-provincial__name {
+  font-size: calc(var(--u) * 31);
+  text-transform: uppercase;
+}
+
+.ipp-ornate {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin: auto 0;
+}
+
+.ipp-ornate__ring {
+  position: absolute;
+  inset: 0;
+  background: var(--ipp-ornate) center / contain no-repeat;
+}
+
+.ipp-provincial[data-earned] .ipp-ornate__ring {
+  opacity: 0.55;
+}
+
+.ipp-ornate__stamp {
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ipp-provincial__caption {
+  font-size: calc(var(--u) * 9.6);
+  color: var(--paper-ink-muted);
+}
+
+.ipp-page[data-dir="classic"] .ipp-provincial__caption {
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-weight: 500;
+  font-size: calc(var(--u) * 13.4);
+}
+
+.ipp-pips {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 10);
+  margin-top: calc(var(--u) * 12);
+}
+
+.ipp-pips__row {
+  display: flex;
+  gap: calc(var(--u) * 5);
+}
+
+.ipp-pip {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  width: calc(var(--u) * 17);
+  height: calc(var(--u) * 17);
+  border-radius: 50%;
+  border: calc(var(--u) * 1) dashed var(--ink-empty);
+}
+
+.ipp-pip[data-on] {
+  border: 0;
+  background: var(--foil-gradient) 30% 30% / 220% 220%;
+  box-shadow:
+    inset 0 0 0 calc(var(--u) * 0.6) var(--foil-hi),
+    inset 0 0 0 calc(var(--u) * 1.3) var(--foil-lo),
+    0 calc(var(--u) * 0.8) calc(var(--u) * 1.4) rgba(0, 0, 0, 0.25);
+}
+
+.ipp-pip[data-on]::after {
+  content: "";
+  position: absolute;
+  left: 34%;
+  top: 22%;
+  width: 26%;
+  height: 46%;
+  border: solid var(--foil-shadow);
+  border-width: 0 calc(var(--u) * 1.7) calc(var(--u) * 1.7) 0;
+  transform: rotate(42deg);
+}
+
+.ipp-pips__text {
+  font-size: calc(var(--u) * 10);
+  font-weight: 700;
+  color: var(--ink-verified);
+}
+
+.ipp-provincial__rule {
+  max-width: calc(var(--u) * 252);
+  margin-top: calc(var(--u) * 7);
+  margin-bottom: calc(var(--u) * 9);
+  font-size: calc(var(--u) * 8.8);
+  line-height: 1.45;
+  color: var(--paper-ink-muted);
+}
+
+/* ------------------------------------------------------------------ */
+/* Stamp detail sheet (px: it lives in the app chrome, not on a page)  */
+/* ------------------------------------------------------------------ */
+
+.ipp-sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  font-family: var(--ff-body);
+  color: var(--fg);
+  --tone: var(--accent);
+}
+
+.ipp-sheet-root[data-status="discovery"] {
+  --tone: var(--status-discovery);
+}
+
+.ipp-sheet-root[data-status="pending"] {
+  --tone: var(--status-pending);
+}
+
+.ipp-sheet-root[data-status="verified"] {
+  --tone: var(--status-verified);
+}
+
+.ipp-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 8, 16, 0.56);
+}
+
+.ipp-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  max-height: min(90dvh, 760px);
+  border-radius: 26px 26px 0 0;
+  background: var(--bg-elev);
+  box-shadow:
+    0 -1px 0 var(--line),
+    0 -24px 60px -18px rgba(0, 0, 0, 0.5);
+  will-change: transform;
+}
+
+/* Fills the gap under the sheet while the spring overshoots. */
+.ipp-sheet::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 240px;
+  background: var(--bg-elev);
+}
+
+.ipp-sheet__grab {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 56px;
+  padding-bottom: 12px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.ipp-sheet__handle {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  width: 40px;
+  height: 4px;
+  margin-left: -20px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+
+.ipp-sheet__eyebrow {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.ipp-sheet__close {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ipp-sheet__scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 20px calc(20px + env(safe-area-inset-bottom, 0px));
+}
+
+.ipp-sheet__hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 208px;
+  border-radius: var(--r-card);
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px var(--paper-edge),
+    0 1px 2px rgba(0, 0, 0, 0.08);
+  touch-action: none;
+}
+
+.ipp-sheet__hero-dim {
+  position: absolute;
+  inset: 0;
+}
+
+.ipp-sheet__sample.sample-tag {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  color: var(--paper-ink-muted);
+  border-color: var(--paper-edge);
+}
+
+.ipp-sheet__head {
+  padding: 18px 2px 4px;
+}
+
+.ipp-sheet__title {
+  margin: 0;
+  font-size: 32px;
+  line-height: 1.04;
+  color: var(--fg);
+}
+
+.ipp-sheet__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 12px 0 0;
+}
+
+.ipp-sheet__chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 9px;
+  border-radius: var(--r-chip);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--tone);
+  isolation: isolate;
+}
+
+.ipp-sheet__chip::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.12;
+}
+
+.ipp-sheet__chip::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid currentColor;
+  opacity: 0.32;
+}
+
+.ipp-sheet__chip i {
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+}
+
+.ipp-sheet-root[data-status="pending"] .ipp-sheet__chip i {
+  border-style: dashed;
+}
+
+.ipp-sheet-root[data-status="verified"] .ipp-sheet__chip i,
+.ipp-sheet-root[data-status="provincial"] .ipp-sheet__chip i {
+  background: currentColor;
+}
+
+.ipp-sheet__blurb {
+  font-size: 13.5px;
+  line-height: 1.4;
+  color: var(--fg-muted);
+}
+
+.ipp-sheet__rows {
+  margin: 16px 0 0;
+}
+
+.ipp-sheet__row {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 14px;
+  align-items: baseline;
+  padding: 13px 2px;
+  border-top: 1px solid var(--line);
+}
+
+.ipp-sheet__row dt {
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--fg-subtle);
+}
+
+.ipp-sheet__row dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--fg);
+}
+
+.ipp-sheet__row dd[data-mono] {
+  font-family: var(--ff-mono);
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+}
+
+.ipp-sheet__row dd[data-tone] {
+  font-weight: 700;
+  color: var(--tone);
+}
+
+.ipp-sheet__note {
+  margin: 4px 0 0;
+  padding: 13px 2px 0;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-subtle);
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion (UX-5)                                               */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  button.ipp-slot,
+  button.ipp-ornate__stamp {
+    transition: none;
+  }
+
+  .ipp-slot[data-highlight] .ipp-slot__stamp::after,
+  .ipp-ornate[data-highlight]::after {
+    animation: none;
+    opacity: 0.6;
+  }
+}

@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" stroke="#000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+<!-- Placeholder line art for the Island Passport demo. Replaced by generated PNG ink masks. -->
+<circle cx="204" cy="40" r="7" stroke-width="4.5"/>
+<circle cx="220" cy="66" r="4" stroke-width="4.5"/>
+<circle cx="30" cy="204" r="5" stroke-width="4.5"/>
+<defs>
+  <mask id="shell" maskUnits="userSpaceOnUse" x="-40" y="-40" width="320" height="320">
+    <rect x="-40" y="-40" width="320" height="320" fill="#fff"/>
+    <ellipse cx="120" cy="126" rx="50" ry="62" fill="#000" stroke="#000" stroke-width="10"/>
+  </mask>
+</defs>
+<g transform="rotate(-24 120 124)">
+ <g mask="url(#shell)">
+  <path d="M108 68 C98 50 106 32 120 32 C134 32 142 50 132 68"/>
+  <circle cx="111" cy="48" r="3.2" fill="#000" stroke="none"/>
+  <circle cx="129" cy="48" r="3.2" fill="#000" stroke="none"/>
+  <path d="M82 88 C56 60 24 62 10 90 C36 88 58 100 74 116"/>
+  <path d="M158 88 C184 60 216 62 230 90 C204 88 182 100 166 116"/>
+  <path d="M84 170 C62 176 52 194 58 212 C74 206 90 196 100 182"/>
+  <path d="M156 170 C178 176 188 194 182 212 C166 206 150 196 140 182"/>
+  <path d="M113 186 L120 204 L127 186"/>
+ </g>
+  <ellipse cx="120" cy="126" rx="50" ry="62"/>
+  <g stroke-width="4.5">
+    <path d="M120 82 L139 96 V122 L120 136 L101 122 V96 Z"/>
+    <path d="M120 136 L136 150 L131 170 L120 178 L109 170 L104 150 Z"/>
+    <path d="M120 82 V66 M139 96 L160 86 M101 96 L80 86 M139 122 L169 126 M101 122 L71 126 M136 150 L161 160 M104 150 L79 160 M131 170 L140 182 M109 170 L100 182"/>
+  </g>
+</g>
+</svg>

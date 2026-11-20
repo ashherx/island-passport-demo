@@ -1,0 +1,475 @@
+/*
+ * Custom passport engine (src/components/passport/engine-custom).
+ * Everything inside .pb-scaler is laid out in design pixels (a page is 320 x 454) and scaled once.
+ * Nothing here animates: engine.ts writes transform, opacity and visibility while a leaf moves.
+ */
+
+.pb-root {
+  position: relative;
+  display: block;
+  width: 100%;
+  touch-action: pan-y pinch-zoom;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+  /* The left-hand stack runs off the side in single view. Vertical overflow stays visible so a
+     leaf looming towards the viewer is never cut. */
+  overflow-x: clip;
+  --pb-shade: 22, 15, 8;
+}
+
+/* Browsers without overflow: clip (Safari before 16): clip both ways rather than let the
+   off-screen half of the book widen the page. */
+@supports not (overflow: clip) {
+  .pb-root {
+    overflow: hidden;
+  }
+}
+
+.pb-root:focus-visible {
+  outline: none;
+}
+
+/* Keyboard focus ring, drawn round the book rather than the whole stage. */
+.pb-focus {
+  position: absolute;
+  left: -7px;
+  width: calc(var(--pb-cw) + 14px);
+  border: 2px solid var(--focus);
+  border-radius: calc(var(--r-passport) + 7px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateZ(60px);
+}
+
+.pb-root[data-pb-state="back"] .pb-focus,
+.pb-root[data-mode="spread"][data-pb-state="open"] .pb-focus {
+  left: calc(-1 * var(--pb-cw) - 7px);
+}
+
+.pb-root[data-mode="spread"][data-pb-state="open"] .pb-focus {
+  width: calc(2 * var(--pb-cw) + 14px);
+}
+
+.pb-root:focus-visible .pb-focus {
+  opacity: 1;
+}
+
+.pb-scaler {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+}
+
+.pb-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.pb-book {
+  position: absolute;
+  left: 0;
+  width: 0;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.pb-fill {
+  position: absolute;
+  inset: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Shadow under the book                                               */
+/* ------------------------------------------------------------------ */
+
+.pb-ground {
+  position: absolute;
+  box-shadow: var(--passport-shadow);
+  pointer-events: none;
+  will-change: opacity;
+}
+
+.pb-ground--r {
+  left: 0;
+  border-radius: 3px var(--r-passport) var(--r-passport) 3px;
+}
+
+.pb-ground--l {
+  border-radius: var(--r-passport) 3px 3px var(--r-passport);
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Covers                                                              */
+/* ------------------------------------------------------------------ */
+
+.pb-cover {
+  position: absolute;
+  left: 0;
+  transform-origin: 0 50%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.pb-board {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 3px var(--r-passport) var(--r-passport) 3px;
+}
+
+/* A face seen from behind is mirrored, so its rounded corners sit on the other side. */
+.pb-board--flip {
+  border-radius: var(--r-passport) 3px 3px var(--r-passport);
+}
+
+.pb-board--outside {
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Inside of a board: the cover material turned in round the edge, with an endpaper pasted on. */
+.pb-board--inside {
+  background: var(--cover-deep);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+}
+
+.pb-endpaper {
+  position: absolute;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 0.5px var(--paper-edge),
+    0 0 3px rgba(0, 0, 0, 0.25);
+}
+
+.pb-endpaper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--paper-shade);
+  opacity: 0.55;
+}
+
+.pb-cover-content {
+  position: absolute;
+  inset: 0;
+}
+
+/* The crease where the cover folds round the spine. */
+.pb-spine {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 9%;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.1) 22%,
+    rgba(255, 255, 255, 0.1) 34%,
+    rgba(0, 0, 0, 0.16) 48%,
+    rgba(0, 0, 0, 0.04) 72%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+.pb-board--flip .pb-spine {
+  inset: 0 0 0 auto;
+  transform: scaleX(-1);
+}
+
+.pb-glare {
+  position: absolute;
+  top: -10%;
+  left: 0;
+  width: 46%;
+  height: 120%;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.07) 30%,
+    rgba(255, 255, 255, 0.3) 50%,
+    rgba(255, 255, 255, 0.07) 70%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.pb-dim {
+  position: absolute;
+  inset: 0;
+  background: rgb(8, 6, 4);
+  opacity: 0;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* Board thickness along the fore edge, seen as the cover stands up. */
+.pb-edge {
+  position: absolute;
+  top: calc(var(--r-passport) * 0.6);
+  bottom: calc(var(--r-passport) * 0.6);
+  opacity: 0;
+  will-change: opacity;
+  left: 100%;
+  transform-origin: 0 50%;
+  background: linear-gradient(90deg, var(--cover-deep), var(--cover-edge) 45%, var(--cover-deep));
+}
+
+.pb-passenger {
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pages                                                               */
+/* ------------------------------------------------------------------ */
+
+.pb-sheet {
+  position: absolute;
+  top: 0;
+  visibility: hidden;
+  will-change: transform;
+}
+
+.pb-sheet--r {
+  left: 0;
+}
+
+.pb-inner {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.pb-inner--r {
+  border-radius: 0 var(--r-page) var(--r-page) 0;
+}
+
+.pb-inner--l {
+  border-radius: var(--r-page) 0 0 var(--r-page);
+}
+
+.pb-paper {
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 0 0.5px var(--paper-edge);
+  border-radius: inherit;
+}
+
+.pb-content {
+  position: absolute;
+  inset: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* The page dips into the binding: a soft shadow, a ridge of light, then flat. */
+.pb-gutter {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pb-gutter--r {
+  background: linear-gradient(
+    90deg,
+    rgba(var(--pb-shade), 0.3) 0%,
+    rgba(var(--pb-shade), 0.13) 2.2%,
+    rgba(var(--pb-shade), 0.045) 6%,
+    rgba(255, 255, 255, 0.07) 9.5%,
+    rgba(var(--pb-shade), 0.02) 15%,
+    rgba(var(--pb-shade), 0) 24%
+  );
+}
+
+.pb-gutter--l {
+  background: linear-gradient(
+    270deg,
+    rgba(var(--pb-shade), 0.34) 0%,
+    rgba(var(--pb-shade), 0.15) 2.2%,
+    rgba(var(--pb-shade), 0.05) 6%,
+    rgba(255, 255, 255, 0.05) 9.5%,
+    rgba(var(--pb-shade), 0.03) 15%,
+    rgba(var(--pb-shade), 0) 26%
+  );
+}
+
+/* The reverse of a leaf in single view sits a touch deeper in tone than a printed face. */
+.pb-inner--blank .pb-paper::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--paper-shade);
+  opacity: 0.5;
+}
+
+/* The fore edge of the page block: a few leaves showing under the top one. */
+.pb-block {
+  position: absolute;
+  top: 0;
+  visibility: hidden;
+  background: var(--paper-shade);
+  pointer-events: none;
+}
+
+.pb-block--r {
+  left: 0;
+  border-radius: 0 var(--r-page) var(--r-page) 0;
+  box-shadow:
+    0.8px 0.5px 0 0 var(--paper-edge),
+    1.6px 1px 0 0 var(--paper-shade),
+    2.4px 1.5px 0 0 var(--paper-edge),
+    3.4px 2.4px 3px 0 rgba(0, 0, 0, 0.28);
+}
+
+.pb-block--l {
+  border-radius: var(--r-page) 0 0 var(--r-page);
+  box-shadow:
+    -0.8px 0.5px 0 0 var(--paper-edge),
+    -1.6px 1px 0 0 var(--paper-shade),
+    -2.4px 1.5px 0 0 var(--paper-edge),
+    -3.4px 2.4px 3px 0 rgba(0, 0, 0, 0.28);
+}
+
+/* ------------------------------------------------------------------ */
+/* Shadows thrown by a turning leaf                                    */
+/* ------------------------------------------------------------------ */
+
+.pb-cast {
+  position: absolute;
+  top: 0;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.pb-cast--r {
+  left: 0;
+  transform-origin: 0 50%;
+  border-radius: 0 var(--r-page) var(--r-page) 0;
+  /* Deep under the leaf, thinning out to nothing beyond its edge. */
+  background: linear-gradient(
+    90deg,
+    rgba(var(--pb-shade), 0.5) 0%,
+    rgba(var(--pb-shade), 0.47) 38%,
+    rgba(var(--pb-shade), 0.38) 62%,
+    rgba(var(--pb-shade), 0.24) 80%,
+    rgba(var(--pb-shade), 0.09) 93%,
+    rgba(var(--pb-shade), 0) 100%
+  );
+}
+
+.pb-cast--l {
+  transform-origin: 100% 50%;
+  border-radius: var(--r-page) 0 0 var(--r-page);
+  background: linear-gradient(
+    270deg,
+    rgba(var(--pb-shade), 0.44) 0%,
+    rgba(var(--pb-shade), 0.42) 50%,
+    rgba(var(--pb-shade), 0.32) 74%,
+    rgba(var(--pb-shade), 0.14) 90%,
+    rgba(var(--pb-shade), 0) 100%
+  );
+}
+
+/* Reduced motion: a snapshot of the old page fades away over the new one. */
+.pb-fade {
+  visibility: hidden;
+  pointer-events: none;
+  will-change: opacity;
+}
+
+/* ------------------------------------------------------------------ */
+/* The turning leaf: a chain of hinged strips                          */
+/* ------------------------------------------------------------------ */
+
+.pb-leaf {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  visibility: hidden;
+  transform-style: preserve-3d;
+  pointer-events: none;
+}
+
+.pb-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 50%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.pb-face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.pb-face--b {
+  transform: rotateY(180deg);
+}
+
+.pb-holder {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.pb-tone {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  will-change: opacity;
+}
+
+/* Shade: two opposing ramps per strip, so the engine can set the tone at each edge. */
+.pb-tone--dl {
+  background: linear-gradient(90deg, rgb(var(--pb-shade)), rgba(var(--pb-shade), 0));
+}
+
+.pb-tone--dr {
+  background: linear-gradient(270deg, rgb(var(--pb-shade)), rgba(var(--pb-shade), 0));
+}
+
+.pb-tone--gl {
+  background: linear-gradient(90deg, rgb(255, 252, 244), rgba(255, 252, 244, 0));
+}
+
+.pb-tone--gr {
+  background: linear-gradient(270deg, rgb(255, 252, 244), rgba(255, 252, 244, 0));
+}
+
+/* ------------------------------------------------------------------ */
+/* Misc                                                                */
+/* ------------------------------------------------------------------ */
+
+.pb-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.pb-root[data-ready="false"] .pb-scaler {
+  opacity: 0;
+}

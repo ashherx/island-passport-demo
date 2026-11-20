@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" stroke="#000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+<!-- Placeholder line art for the Island Passport demo. Replaced by generated PNG ink masks. -->
+<defs>
+  <mask id="hill" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="240">
+    <rect width="240" height="240" fill="#fff"/>
+    <path d="M78 168 C88 104 152 104 162 168 Z" fill="#000" stroke="#000" stroke-width="14"/>
+  </mask>
+  <mask id="hills" maskUnits="userSpaceOnUse" x="0" y="0" width="240" height="240">
+    <rect width="240" height="240" fill="#fff"/>
+    <path d="M78 168 C88 104 152 104 162 168 Z" fill="#000" stroke="#000" stroke-width="14"/>
+    <path d="M52 168 C58 128 98 128 104 168 Z M136 168 C142 128 182 128 188 168 Z" fill="#000" stroke="#000" stroke-width="14"/>
+  </mask>
+</defs>
+<path d="M63.4 194.5 L60 191.7 L56.8 188.8 L53.7 185.8 L50.8 182.6 L48 179.3 L45.4 175.8 L42.9 172.2 L40.6 168.6 L38.5 164.8 L36.6 160.9 L34.9 156.9 L33.3 152.9 L32 148.7 L30.8 144.6 L29.8 140.3 L29.1 136.1 L28.5 131.8 L28.2 127.5 L28 123.1 L28.1 118.8 L28.3 114.5 L28.8 110.2 L29.4 105.9 L30.3 101.6 L31.3 97.4 L32.6 93.3 L34.1 89.2 L35.7 85.2 L37.5 81.2 L39.5 77.4 L41.7 73.7 L44.1 70 L46.6 66.5 L49.3 63.1 L52.2 59.8 L55.2 56.7 L58.3 53.7 L61.6 50.9 L65 48.2 L68.6 45.7" stroke-width="4"/>
+<ellipse cx="44.8" cy="184.5" rx="9.5" ry="4.2" transform="rotate(188.1 44.8 184.5)" fill="#000" stroke="none"/>
+<ellipse cx="52.8" cy="176.8" rx="9.5" ry="4.2" transform="rotate(264.1 52.8 176.8)" fill="#000" stroke="none"/>
+<ellipse cx="32.3" cy="165.2" rx="9.5" ry="4.2" transform="rotate(201.6 32.3 165.2)" fill="#000" stroke="none"/>
+<ellipse cx="41.8" cy="159.6" rx="9.5" ry="4.2" transform="rotate(277.6 41.8 159.6)" fill="#000" stroke="none"/>
+<ellipse cx="24.6" cy="143.6" rx="9.5" ry="4.2" transform="rotate(215.1 24.6 143.6)" fill="#000" stroke="none"/>
+<ellipse cx="35.2" cy="140.3" rx="9.5" ry="4.2" transform="rotate(291.1 35.2 140.3)" fill="#000" stroke="none"/>
+<ellipse cx="22.2" cy="120.7" rx="9.5" ry="4.2" transform="rotate(228.6 22.2 120.7)" fill="#000" stroke="none"/>
+<ellipse cx="33.3" cy="120" rx="9.5" ry="4.2" transform="rotate(304.6 33.3 120)" fill="#000" stroke="none"/>
+<ellipse cx="25.2" cy="97.9" rx="9.5" ry="4.2" transform="rotate(242.1 25.2 97.9)" fill="#000" stroke="none"/>
+<ellipse cx="36.1" cy="99.9" rx="9.5" ry="4.2" transform="rotate(318.1 36.1 99.9)" fill="#000" stroke="none"/>
+<ellipse cx="33.5" cy="76.5" rx="9.5" ry="4.2" transform="rotate(255.6 33.5 76.5)" fill="#000" stroke="none"/>
+<ellipse cx="43.6" cy="80.9" rx="9.5" ry="4.2" transform="rotate(331.6 43.6 80.9)" fill="#000" stroke="none"/>
+<ellipse cx="46.5" cy="57.5" rx="9.5" ry="4.2" transform="rotate(269.1 46.5 57.5)" fill="#000" stroke="none"/>
+<ellipse cx="55.3" cy="64.2" rx="9.5" ry="4.2" transform="rotate(345.1 55.3 64.2)" fill="#000" stroke="none"/>
+<ellipse cx="63.6" cy="42.1" rx="9.5" ry="4.2" transform="rotate(282.6 63.6 42.1)" fill="#000" stroke="none"/>
+<ellipse cx="70.6" cy="50.7" rx="9.5" ry="4.2" transform="rotate(358.6 70.6 50.7)" fill="#000" stroke="none"/>
+<path d="M176.6 194.5 L180 191.7 L183.2 188.8 L186.3 185.8 L189.2 182.6 L192 179.3 L194.6 175.8 L197.1 172.2 L199.4 168.6 L201.5 164.8 L203.4 160.9 L205.1 156.9 L206.7 152.9 L208 148.7 L209.2 144.6 L210.2 140.3 L210.9 136.1 L211.5 131.8 L211.8 127.5 L212 123.1 L211.9 118.8 L211.7 114.5 L211.2 110.2 L210.6 105.9 L209.7 101.6 L208.7 97.4 L207.4 93.3 L205.9 89.2 L204.3 85.2 L202.5 81.2 L200.5 77.4 L198.3 73.7 L195.9 70 L193.4 66.5 L190.7 63.1 L187.8 59.8 L184.8 56.7 L181.7 53.7 L178.4 50.9 L175 48.2 L171.4 45.7" stroke-width="4"/>
+<ellipse cx="187.2" cy="176.8" rx="9.5" ry="4.2" transform="rotate(-84.1 187.2 176.8)" fill="#000" stroke="none"/>
+<ellipse cx="195.2" cy="184.5" rx="9.5" ry="4.2" transform="rotate(-8.1 195.2 184.5)" fill="#000" stroke="none"/>
+<ellipse cx="198.2" cy="159.6" rx="9.5" ry="4.2" transform="rotate(-97.6 198.2 159.6)" fill="#000" stroke="none"/>
+<ellipse cx="207.7" cy="165.2" rx="9.5" ry="4.2" transform="rotate(-21.6 207.7 165.2)" fill="#000" stroke="none"/>
+<ellipse cx="204.8" cy="140.3" rx="9.5" ry="4.2" transform="rotate(-111.1 204.8 140.3)" fill="#000" stroke="none"/>
+<ellipse cx="215.4" cy="143.6" rx="9.5" ry="4.2" transform="rotate(-35.1 215.4 143.6)" fill="#000" stroke="none"/>
+<ellipse cx="206.7" cy="120" rx="9.5" ry="4.2" transform="rotate(-124.6 206.7 120)" fill="#000" stroke="none"/>
+<ellipse cx="217.8" cy="120.7" rx="9.5" ry="4.2" transform="rotate(-48.6 217.8 120.7)" fill="#000" stroke="none"/>
+<ellipse cx="203.9" cy="99.9" rx="9.5" ry="4.2" transform="rotate(-138.1 203.9 99.9)" fill="#000" stroke="none"/>
+<ellipse cx="214.8" cy="97.9" rx="9.5" ry="4.2" transform="rotate(-62.1 214.8 97.9)" fill="#000" stroke="none"/>
+<ellipse cx="196.4" cy="80.9" rx="9.5" ry="4.2" transform="rotate(-151.6 196.4 80.9)" fill="#000" stroke="none"/>
+<ellipse cx="206.5" cy="76.5" rx="9.5" ry="4.2" transform="rotate(-75.6 206.5 76.5)" fill="#000" stroke="none"/>
+<ellipse cx="184.7" cy="64.2" rx="9.5" ry="4.2" transform="rotate(-165.1 184.7 64.2)" fill="#000" stroke="none"/>
+<ellipse cx="193.5" cy="57.5" rx="9.5" ry="4.2" transform="rotate(-89.1 193.5 57.5)" fill="#000" stroke="none"/>
+<ellipse cx="169.4" cy="50.7" rx="9.5" ry="4.2" transform="rotate(-178.6 169.4 50.7)" fill="#000" stroke="none"/>
+<ellipse cx="176.4" cy="42.1" rx="9.5" ry="4.2" transform="rotate(-102.6 176.4 42.1)" fill="#000" stroke="none"/>
+
+<path d="M120 17 L123.2 25.6 L132.4 26 L125.2 31.7 L127.6 40.5 L120 35.5 L112.4 40.5 L114.8 31.7 L107.6 26 L116.8 25.6 Z" fill="#000" stroke="none"/>
+<path d="M88 34 L90 39.3 L95.6 39.5 L91.2 43 L92.7 48.5 L88 45.4 L83.3 48.5 L84.8 43 L80.4 39.5 L86 39.3 Z" fill="#000" stroke="none"/>
+<path d="M152 34 L154 39.3 L159.6 39.5 L155.2 43 L156.7 48.5 L152 45.4 L147.3 48.5 L148.8 43 L144.4 39.5 L150 39.3 Z" fill="#000" stroke="none"/>
+<g mask="url(#hills)">
+  <circle cx="120" cy="112" r="30"/>
+  <path d="M80.6 105.1 L64.9 102.3 M85.4 92 L71.5 84 M94.3 81.4 L84 69.1 M106.3 74.4 L100.8 59.4 M120 72 L120 56 M133.7 74.4 L139.2 59.4 M145.7 81.4 L156 69.1 M154.6 92 L168.5 84 M159.4 105.1 L175.1 102.3" stroke-width="5"/>
+</g>
+<g mask="url(#hill)">
+  <path d="M52 168 C58 128 98 128 104 168"/>
+  <path d="M136 168 C142 128 182 128 188 168"/>
+</g>
+<path d="M78 168 C88 104 152 104 162 168"/>
+<path d="M46 168 H194"/>
+<path d="M108 140 q5 -8 10 0 M124 128 q5 -8 10 0 M126 152 q5 -8 10 0 M100 156 q5 -8 10 0" stroke-width="4.5"/>
+<path d="M60 186 q12 -12 24 0 t24 0 t24 0 t24 0 t24 0" stroke-width="5"/>
+<path d="M84 202 q12 -12 24 0 t24 0 t24 0" stroke-width="5"/>
+</svg>

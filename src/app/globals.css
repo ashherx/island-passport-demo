@@ -1,26 +1,483 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * Island Passport demo: global styles.
+ *
+ * Design tokens are NOT declared here. They are generated from src/lib/directions.ts and injected
+ * in <head> by layout.tsx as CSS variables scoped to [data-direction] and [data-theme].
+ * This file maps those variables into Tailwind, and holds the shared material and component
+ * classes (mat-cover, mat-paper, foil-text, the stamp and the theme switcher).
+ *
+ * Variable reference: docs/agents/foundation.md
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Chrome (changes with light/dark) */
+  --color-bg: var(--bg);
+  --color-elev: var(--bg-elev);
+  --color-sunken: var(--bg-sunken);
+  --color-fg: var(--fg);
+  --color-muted: var(--fg-muted);
+  --color-subtle: var(--fg-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-focus: var(--focus);
+  --color-status-discovery: var(--status-discovery);
+  --color-status-pending: var(--status-pending);
+  --color-status-verified: var(--status-verified);
+
+  /* Passport (physical object: same in light and dark) */
+  --color-cover: var(--cover);
+  --color-cover-deep: var(--cover-deep);
+  --color-cover-edge: var(--cover-edge);
+  --color-cover-ink: var(--cover-ink);
+  --color-foil: var(--foil);
+  --color-foil-hi: var(--foil-hi);
+  --color-foil-lo: var(--foil-lo);
+  --color-paper: var(--paper);
+  --color-paper-shade: var(--paper-shade);
+  --color-paper-edge: var(--paper-edge);
+  --color-paper-ink: var(--paper-ink);
+  --color-paper-muted: var(--paper-ink-muted);
+  --color-paper-line: var(--paper-line);
+  --color-ink-discovery: var(--ink-discovery);
+  --color-ink-pending: var(--ink-pending);
+  --color-ink-verified: var(--ink-verified);
+  --color-ink-provincial: var(--ink-provincial);
+  --color-ink-empty: var(--ink-empty);
+
+  --font-display: var(--ff-display);
+  --font-body: var(--ff-body);
+  --font-sans: var(--ff-body);
+  --font-mono: var(--ff-mono);
+  --font-stamp: var(--ff-stamp);
+
+  --radius-chip: var(--r-chip);
+  --radius-card: var(--r-card);
+  --radius-passport: var(--r-passport);
+  --radius-page: var(--r-page);
+
+  --shadow-passport: var(--passport-shadow);
+
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.44, 1);
+  --ease-press: cubic-bezier(0.5, 0, 0.9, 0.4);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--ff-body);
+  font-feature-settings: "kern", "liga";
+  text-rendering: optimizeLegibility;
+  transition:
+    background-color 0.5s var(--ease-out-soft),
+    color 0.5s var(--ease-out-soft);
+}
+
+/* A direction scope inside the page re-themes its own text and fonts. */
+[data-direction] {
+  color: var(--fg);
+  font-family: var(--ff-body);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Display type: the passport title, section headings. */
+.font-display,
+.type-display {
+  font-family: var(--ff-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  font-variation-settings: var(--display-variation);
+}
+
+/* Small tracked label, e.g. "PROVINCE", "PASSPORT NO." */
+.type-label {
+  font-family: var(--ff-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* The subtle "Sample" marker (PUB-7). */
+.sample-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15em 0.6em;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-chip);
+  color: var(--fg-muted);
+  font-family: var(--ff-mono);
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
+/* Materials                                                           */
+/* ------------------------------------------------------------------ */
+
+/* Stage the passport sits on. */
+.scene-bg {
+  background: var(--scene);
+}
+
+/* Passport cover: leather, linen or kraft depending on the direction. */
+.mat-cover {
+  background-color: var(--cover);
+  background-image: var(--cover-image);
+  background-size: var(--cover-size);
+  background-repeat: var(--cover-repeat);
+  background-blend-mode: var(--cover-blend);
+  color: var(--cover-ink);
+}
+
+/* Passport page: security paper, watercolour paper or field-notebook grid. */
+.mat-paper {
+  background-color: var(--paper);
+  background-image: var(--paper-image);
+  background-size: var(--paper-size);
+  background-repeat: var(--paper-repeat);
+  background-blend-mode: var(--paper-blend);
+  color: var(--paper-ink);
+}
+
+/* Lay over a cover (position: absolute; inset: 0) to light it. Adapts to light/dark. */
+.mat-sheen {
+  background: var(--passport-sheen);
+  pointer-events: none;
+}
+
+/* Lay over a page so paper does not glare on a dark stage. Transparent in light mode. */
+.mat-page-dim {
+  background: var(--page-dim);
+  pointer-events: none;
+}
+
+/* Metallic foil. */
+.foil-fill {
+  background-image: var(--foil-gradient);
+  background-size: 220% 220%;
+  background-position: 30% 30%;
+}
+
+.foil-text {
+  background-image: var(--foil-gradient);
+  background-size: 220% 220%;
+  background-position: 30% 30%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--foil);
+}
+
+/* ------------------------------------------------------------------ */
+/* Stamp (src/components/stamp/Stamp.tsx)                              */
+/* ------------------------------------------------------------------ */
+
+.ip-stamp {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+  color: var(--stamp-ink);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ip-stamp__tilt {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--stamp-rotate, 0deg));
+}
+
+.ip-stamp__ink {
+  position: absolute;
+  inset: 0;
+  opacity: var(--stamp-ink-opacity, 1);
+}
+
+.ip-stamp[data-blend="multiply"] .ip-stamp__ink {
+  mix-blend-mode: multiply;
+}
+
+.ip-stamp__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ip-stamp__svg text {
+  font-family: var(--ff-stamp);
+  font-weight: var(--stamp-weight);
+  fill: currentColor;
+  /* A hairline of ink spread: rubber type prints a touch heavier than it is cut. */
+  stroke: currentColor;
+  stroke-width: 0.55px;
+  stroke-linejoin: round;
+  text-transform: uppercase;
+}
+
+.ip-stamp__svg text.ip-stamp__mono {
+  font-family: var(--ff-mono);
+  font-weight: 600;
+  stroke-width: 0.2px;
+}
+
+.ip-stamp__svg path,
+.ip-stamp__svg circle {
+  vector-effect: none;
+}
+
+/* Knock-out content inside an SVG mask: black removes ink so the paper shows through. */
+.ip-stamp__svg .ip-stamp__ko,
+.ip-stamp__svg .ip-stamp__ko text {
+  fill: #000;
+  stroke: #000;
+}
+
+.ip-stamp__sealmark text,
+.ip-stamp__pendingmark text {
+  font-family: var(--ff-stamp);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+/* The illustration: an alpha mask tinted with the status ink. */
+.ip-stamp__art {
+  position: absolute;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
+.ip-stamp__seal {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/*
+ * Escape hatch for heavy moments (e.g. while a page is mid-flip on a slow phone):
+ * put data-stamp-ink="clean" on any ancestor to drop the SVG ink filter. Stamps stay legible.
+ */
+[data-stamp-ink="clean"] .ip-stamp__ink {
+  filter: none !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Theme switcher (src/components/theme/ThemeSwitcher.tsx)             */
+/* ------------------------------------------------------------------ */
+
+.ip-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ff-body);
+}
+
+.ip-switcher__track {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--ip-switch-count, 3), minmax(0, 1fr));
+  padding: 3px;
+  border-radius: var(--r-chip);
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.ip-switcher__thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / var(--ip-switch-count, 3));
+  border-radius: calc(var(--r-chip) - 1px);
+  background: var(--bg-elev);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 1px 2px rgba(0, 0, 0, 0.1),
+    0 4px 10px -4px rgba(0, 0, 0, 0.22);
+  transform: translateX(calc(var(--ip-switch-index, 0) * 100%));
+  transition: transform 0.46s var(--ease-spring);
+}
+
+.ip-switcher__chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px 0 8px;
+  border: 0;
+  border-radius: calc(var(--r-chip) - 1px);
+  background: none;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.25s ease;
+  touch-action: manipulation;
+}
+
+.ip-switcher--compact .ip-switcher__chip {
+  min-width: 34px;
+  padding: 0 7px;
+}
+
+.ip-switcher__chip[data-selected] {
+  color: var(--fg);
+}
+
+.ip-switcher__chip:focus-visible {
+  outline-offset: 1px;
+}
+
+/* A thumbnail passport: cover colour with a foil dot. */
+.ip-switcher__swatch {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 19px;
+  border-radius: 2.5px 3.5px 3.5px 2.5px;
+  background: linear-gradient(150deg, var(--sw-cover), var(--sw-deep));
+  box-shadow:
+    inset 1.5px 0 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.4s var(--ease-spring);
+}
+
+.ip-switcher__swatch::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2px;
+  border-radius: 50%;
+  background: var(--sw-foil);
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.18);
+}
+
+.ip-switcher__chip[data-selected] .ip-switcher__swatch {
+  transform: rotate(-7deg) scale(1.08);
+}
+
+.ip-mode {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--bg-sunken);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--fg);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background-color 0.3s ease;
+}
+
+.ip-mode__icon {
+  overflow: visible;
+  transition: transform 0.6s var(--ease-spring);
+}
+
+.ip-mode__disc {
+  transform-origin: 12px 12px;
+  transition: transform 0.5s var(--ease-spring);
+}
+
+.ip-mode__cut {
+  transition:
+    cx 0.5s var(--ease-out-soft),
+    cy 0.5s var(--ease-out-soft);
+}
+
+.ip-mode__rays {
+  transform-origin: 12px 12px;
+  transition:
+    transform 0.5s var(--ease-spring),
+    opacity 0.3s ease;
+}
+
+.ip-mode[data-mode="dark"] .ip-mode__icon {
+  transform: rotate(-28deg);
+}
+
+.ip-mode[data-mode="dark"] .ip-mode__disc {
+  transform: scale(1.7);
+}
+
+.ip-mode[data-mode="dark"] .ip-mode__cut {
+  cx: 17px;
+  cy: 8px;
+}
+
+.ip-mode[data-mode="dark"] .ip-mode__rays {
+  transform: scale(0.4) rotate(40deg);
+  opacity: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reduced motion (UX-5)                                               */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  body,
+  .ip-switcher__thumb,
+  .ip-switcher__swatch,
+  .ip-mode__icon,
+  .ip-mode__disc,
+  .ip-mode__cut,
+  .ip-mode__rays {
+    transition-duration: 0.01ms !important;
+  }
 }

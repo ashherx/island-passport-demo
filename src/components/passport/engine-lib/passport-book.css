@@ -1,0 +1,694 @@
+/*
+ * PassportBook (StPageFlip engine): structure, materials added by the engine, and rest poses.
+ *
+ * Layout is CSS only, so the closed cover is the right size on first paint with no script:
+ *   --ipb-n is the number of pages shown side by side (1 on phones, 2 in a wide container),
+ *   and every part of the book is positioned from it.
+ *
+ * Motion is not in this file. The cover swing writes transform/opacity from PassportBook.tsx
+ * while data-state is "opening" or "closing"; the rules here are the two rest poses those
+ * animations start and end on. Page flips are styled inline by StPageFlip and flip-engine.ts.
+ *
+ * Tunable from outside (set on .ipb or any ancestor):
+ *   --ipb-ratio    page width / height                     default 0.68
+ *   --ipb-max-w    widest one page gets                    default 420px
+ *   --ipb-max-h    tallest the book gets                   default min(76vh, 660px)
+ *   --ipb-margin   room kept free beside the book          default 26px
+ *   --ipb-pad      block padding of the root               default clamp(20px, 6vw, 44px)
+ * Read-only, set by the component on .ipb after it measures:
+ *   --ipb-page-w, --ipb-page-h (px), --ipb-u (1% of the page width, px)
+ */
+
+.ipb {
+  --ipb-ratio: 0.68;
+  --ipb-max-w: 420px;
+  --ipb-max-h: min(76vh, 660px);
+  --ipb-margin: 26px;
+  /* How far the page block sits inside the cover: fore edge (share of cover width), head and tail (share of height). */
+  --ipb-ix: 1.7%;
+  --ipb-iy: 1.2%;
+  --ipb-shade-rgb: 24, 18, 10;
+  --ipb-light-rgb: 255, 252, 242;
+
+  position: relative;
+  width: 100%;
+  padding-block: var(--ipb-pad, clamp(20px, 6vw, 44px));
+  container: ipb / inline-size;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Small viewport units where they exist: the book must fit under a phone browser's own bars. */
+@supports (height: 1svh) {
+  .ipb {
+    --ipb-max-h: min(76svh, 660px);
+  }
+}
+
+@supports (overflow: clip) {
+  /* Clip the opened cover at the sides only, so the swing can rise above and below the root. */
+  .ipb {
+    overflow: visible;
+    overflow-x: clip;
+  }
+}
+
+[data-direction="classic"] .ipb {
+  --ipb-shade-rgb: 16, 22, 44;
+}
+[data-direction="reef"] .ipb {
+  --ipb-shade-rgb: 10, 40, 42;
+}
+[data-direction="journal"] .ipb {
+  --ipb-shade-rgb: 44, 28, 12;
+}
+
+.ipb__stage {
+  --ipb-n: 1;
+  position: relative;
+  /* Horizontal swipes anywhere on the book belong to it (a swipe made while the cover is still
+     swinging lands on the boards, not on the pages); vertical ones still scroll the page. */
+  touch-action: pan-y;
+  margin-inline: auto;
+  width: min(100% - 2 * var(--ipb-margin), var(--ipb-max-w), var(--ipb-max-h) * var(--ipb-ratio));
+  aspect-ratio: var(--ipb-ratio);
+}
+
+@container ipb (min-width: 780px) {
+  .ipb[data-spread="auto"] .ipb__stage {
+    --ipb-n: 2;
+    width: min(100% - 2 * var(--ipb-margin), 2 * var(--ipb-max-w), var(--ipb-max-h) * var(--ipb-ratio) * 2);
+    aspect-ratio: calc(var(--ipb-ratio) * 2);
+  }
+}
+
+.ipb[data-spread="double"] .ipb__stage {
+  --ipb-n: 2;
+  width: min(100% - 2 * var(--ipb-margin), 2 * var(--ipb-max-w), var(--ipb-max-h) * var(--ipb-ratio) * 2);
+  aspect-ratio: calc(var(--ipb-ratio) * 2);
+}
+
+/* The book. Closed, it is one cover wide and sits centred; open in a spread it is two wide. */
+.ipb__book {
+  position: absolute;
+  inset: 0;
+  transform: translateX(calc((var(--ipb-n) - 1) * -25%));
+}
+
+.ipb[data-state="open"] .ipb__book {
+  transform: none;
+}
+
+/* Shared footprint of the right-hand board (back cover, and the front cover while closed). */
+.ipb__board,
+.ipb__hinge,
+.ipb__sweep {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--ipb-n) - 1) * 50%);
+  width: calc(100% / var(--ipb-n));
+}
+
+/* ------------------------------------------------------------------ */
+/* Back board, page block edges                                        */
+/* ------------------------------------------------------------------ */
+
+.ipb__board {
+  z-index: 1;
+  border-radius: 3px var(--r-passport) var(--r-passport) 3px;
+  /* Two hairlines of thickness, then the drop shadow. */
+  box-shadow:
+    0 1px 0 0 var(--cover-edge),
+    0.5px 2px 0 0 color-mix(in srgb, var(--cover-deep) 70%, black),
+    var(--passport-shadow);
+}
+
+/* Endpaper glued inside a board. */
+.ipb__lining {
+  position: absolute;
+  inset: 2% 2.6% 2% 0;
+  overflow: hidden;
+  border-radius: 0 calc(var(--r-page) + 1px) calc(var(--r-page) + 1px) 0;
+  box-shadow: inset 0 0 0 1px rgba(var(--ipb-shade-rgb), 0.1);
+}
+
+.ipb__lining::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--ipb-shade-rgb), 0.07);
+  pointer-events: none;
+}
+
+.ipb__face--inside .ipb__lining {
+  inset: 2% 0 2% 2.6%;
+  border-radius: calc(var(--r-page) + 1px) 0 0 calc(var(--r-page) + 1px);
+}
+
+/* Where the opened front cover comes to rest: carries its drop shadow. */
+.ipb__cast {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--ipb-n) - 1) * 50% - 100% / var(--ipb-n));
+  width: calc(100% / var(--ipb-n));
+  z-index: 0;
+  border-radius: var(--r-passport) 3px 3px var(--r-passport);
+  box-shadow: var(--passport-shadow);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ipb[data-state="open"] .ipb__cast {
+  opacity: 1;
+}
+
+/* The stacked sheets seen at the fore edge and tail of the open book. */
+.ipb__stack {
+  position: absolute;
+  top: var(--ipb-iy);
+  bottom: var(--ipb-iy);
+  left: calc((var(--ipb-n) - 1) * 50%);
+  right: calc(var(--ipb-ix) / var(--ipb-n));
+  z-index: 2;
+  border-radius: 0 var(--r-page) var(--r-page) 0;
+  background: var(--paper-shade);
+  box-shadow:
+    1px 0 0 0 var(--paper-edge),
+    2px 0.5px 0 0 var(--paper),
+    3px 1px 0 0 var(--paper-edge),
+    0 1px 0 0 var(--paper-edge),
+    0 2px 2px 0 rgba(var(--ipb-shade-rgb), 0.3);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pages                                                               */
+/* ------------------------------------------------------------------ */
+
+.ipb__pages {
+  position: absolute;
+  top: var(--ipb-iy);
+  bottom: var(--ipb-iy);
+  left: calc(var(--ipb-ix) * (var(--ipb-n) - 1) / var(--ipb-n));
+  right: calc(var(--ipb-ix) / var(--ipb-n));
+  z-index: 3;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  outline: none;
+}
+
+.ipb__pages:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
+  border-radius: var(--r-page);
+}
+
+.ipb__flip {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* StPageFlip promotes the whole book to one layer; keep it from clipping the turning page. */
+.ipb__flip.stf__parent {
+  transform: none;
+}
+
+/*
+ * A page host. StPageFlip positions these inline once it has taken them over.
+ * will-change keeps the same compositing set-up whether the page rests, turns or waits underneath.
+ */
+.ipb-leaf {
+  contain: layout style;
+  will-change: transform, opacity;
+}
+
+/* Before the flip library has loaded, the current page (or spread) is shown as plain elements. */
+.ipb__pages > .ipb-leaf {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: calc(100% / var(--ipb-n));
+  display: none;
+}
+.ipb__pages > .ipb-leaf[data-fallback="right"] {
+  display: block;
+  right: 0;
+}
+.ipb__pages > .ipb-leaf[data-fallback="left"] {
+  display: block;
+  left: 0;
+}
+
+.ipb-leaf--void {
+  pointer-events: none;
+}
+
+/*
+ * The sheet itself. Content may size itself from it: 1cqw is 1% of the page width.
+ * It is its own compositor layer: StPageFlip animates a clip-path on the parent, and without
+ * this every frame of a flip would repaint the whole page, stamps and filters included.
+ */
+.ipb-page {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  container-type: size;
+  will-change: transform;
+  border-radius: 0 var(--r-page) var(--r-page) 0;
+}
+
+.stf__item.--left > .ipb-page,
+.ipb-leaf[data-fallback="left"] > .ipb-page,
+.ipb-leaf--rider > .ipb-page {
+  border-radius: var(--r-page) 0 0 var(--r-page);
+}
+
+.ipb-page__dim {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+/* Back of a turning sheet (single-page mode): plain paper, a little in its own shade. */
+.ipb-leaf--back > .ipb-page {
+  border-radius: var(--r-page) 0 0 var(--r-page);
+}
+.ipb-leaf--back > .ipb-page::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to right, rgba(var(--ipb-shade-rgb), 0.02), rgba(var(--ipb-shade-rgb), 0.1)),
+    var(--page-dim);
+}
+
+/* Drop shadow of the sheet in the air (flip-engine.ts, patchFrame): a blurred copy of its outline, one level below it. */
+.ipb__lift {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: 4;
+  pointer-events: none;
+  will-change: transform, opacity, filter;
+}
+.ipb__lift-twin {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  background: rgb(var(--ipb-shade-rgb));
+}
+
+/* Fold shadows (flip-engine.ts, shadeFold). Fixed boxes; script writes transform and opacity only. */
+.ipb__fold {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100px;
+  height: 100px;
+  transform-origin: 0 0;
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* On the page beneath the fold: darkest in the crook, gone within a third of a page. */
+.ipb__fold--cast {
+  background: linear-gradient(
+    to right,
+    rgba(var(--ipb-shade-rgb), 0.44) 0%,
+    rgba(var(--ipb-shade-rgb), 0.25) 12%,
+    rgba(var(--ipb-shade-rgb), 0.1) 38%,
+    rgba(var(--ipb-shade-rgb), 0.03) 70%,
+    rgba(var(--ipb-shade-rgb), 0) 100%
+  );
+}
+
+/* On the turning sheet, from the fold outwards: crease, lit shoulder of the curl, shaded belly. */
+.ipb__fold--curl {
+  z-index: 6;
+  background: linear-gradient(
+    to right,
+    rgba(var(--ipb-shade-rgb), 0.34) 0%,
+    rgba(var(--ipb-shade-rgb), 0.1) 5%,
+    rgba(var(--ipb-light-rgb), 0.32) 13%,
+    rgba(var(--ipb-light-rgb), 0) 25%,
+    rgba(var(--ipb-shade-rgb), 0.17) 45%,
+    rgba(var(--ipb-shade-rgb), 0.07) 72%,
+    rgba(var(--ipb-shade-rgb), 0) 100%
+  );
+}
+
+/* A plain rectangle over the page the cast shadow falls on. */
+.ipb__cast-box {
+  position: absolute;
+  z-index: 4;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 0 var(--r-page) var(--r-page) 0;
+}
+.ipb__cast-box[data-side="left"] {
+  border-radius: var(--r-page) 0 0 var(--r-page);
+}
+
+/* Spine shading over the pages. Sits between the resting pages (z 1 to 3) and a turning one (z 5). */
+.ipb__gutter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 13%;
+  z-index: 4;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(var(--ipb-shade-rgb), 0.3) 0%,
+    rgba(var(--ipb-shade-rgb), 0.15) 12%,
+    rgba(var(--ipb-shade-rgb), 0.06) 38%,
+    rgba(var(--ipb-shade-rgb), 0.015) 72%,
+    rgba(var(--ipb-shade-rgb), 0) 100%
+  );
+}
+
+.ipb__flip[data-mode="double"] .ipb__gutter {
+  left: 43.5%;
+  width: 13%;
+  background: linear-gradient(
+    to right,
+    rgba(var(--ipb-shade-rgb), 0) 0%,
+    rgba(var(--ipb-shade-rgb), 0.015) 14%,
+    rgba(var(--ipb-shade-rgb), 0.06) 31%,
+    rgba(var(--ipb-shade-rgb), 0.15) 44%,
+    rgba(var(--ipb-shade-rgb), 0.3) 50%,
+    rgba(var(--ipb-shade-rgb), 0.15) 56%,
+    rgba(var(--ipb-shade-rgb), 0.06) 69%,
+    rgba(var(--ipb-shade-rgb), 0.015) 86%,
+    rgba(var(--ipb-shade-rgb), 0) 100%
+  );
+}
+
+/* Until the book is fully open, nothing may show left of the spine except the cover itself. */
+.ipb:not([data-state="open"]) .ipb__pages .stf__item.--left,
+.ipb:not([data-state="open"]) .ipb__pages > .ipb-leaf[data-fallback="left"] {
+  visibility: hidden;
+}
+.ipb:not([data-state="open"]) .ipb__flip[data-mode="double"] .ipb__gutter {
+  clip-path: inset(0 0 0 50%);
+}
+
+/* Shadow the lifting cover drops on the first page. Driven from script. */
+.ipb__sweep {
+  z-index: 4;
+  border-radius: 3px var(--r-passport) var(--r-passport) 3px;
+  background: linear-gradient(
+    to right,
+    rgba(var(--ipb-shade-rgb), 0.5) 0%,
+    rgba(var(--ipb-shade-rgb), 0.42) 55%,
+    rgba(var(--ipb-shade-rgb), 0.2) 84%,
+    rgba(var(--ipb-shade-rgb), 0) 100%
+  );
+  transform-origin: 0 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Front cover                                                         */
+/* ------------------------------------------------------------------ */
+
+/* The only 3D context in the component: it holds the hinged cover and nothing else. */
+.ipb__hinge-space {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  perspective: calc(var(--ipb-page-w, 340px) * 5.2);
+  perspective-origin: calc(100% - 50% / var(--ipb-n)) 42%;
+  pointer-events: none;
+}
+
+.ipb[data-state="open"] .ipb__hinge-space {
+  z-index: 1;
+}
+
+.ipb__hinge {
+  transform-origin: 0 50%;
+  transform-style: preserve-3d;
+  pointer-events: auto;
+}
+
+/*
+ * While the cover is in the air, everything the swing touches is its own layer, so a frame is
+ * compositor work only. Without will-change the browser repaints the cover (leather, foil) each
+ * time its on-screen scale or an overlay's opacity changes, which is every frame of the swing.
+ */
+.ipb[data-state="opening"] .ipb__book,
+.ipb[data-state="closing"] .ipb__book,
+.ipb[data-state="opening"] .ipb__hinge,
+.ipb[data-state="closing"] .ipb__hinge,
+.ipb[data-state="opening"] .ipb__face,
+.ipb[data-state="closing"] .ipb__face {
+  will-change: transform;
+}
+.ipb[data-state="opening"] :is(.ipb__shade, .ipb__glint, .ipb__sweep, .ipb__cast),
+.ipb[data-state="closing"] :is(.ipb__shade, .ipb__glint, .ipb__sweep, .ipb__cast) {
+  will-change: transform, opacity;
+}
+
+.ipb__face {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.ipb__face--front {
+  border-radius: 3px var(--r-passport) var(--r-passport) 3px;
+  cursor: pointer;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+  outline: none;
+}
+
+.ipb__face--front:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 5px;
+}
+
+.ipb__face--inside {
+  transform: rotateY(180deg);
+  border-radius: var(--r-passport) 3px 3px var(--r-passport);
+}
+
+/* Rest pose, open: the cover lies flat to the left of the spine, inside up. No 3D involved. */
+.ipb[data-state="open"] .ipb__hinge {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+.ipb[data-state="open"] .ipb__face--front {
+  visibility: hidden;
+}
+.ipb[data-state="open"] .ipb__face--inside {
+  transform: none;
+}
+
+.ipb__cover-content {
+  position: absolute;
+  inset: 0;
+  /* Content may size itself from the cover: 1cqw is 1% of the cover width. */
+  container-type: size;
+}
+
+.ipb__layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Crease where the cover bends at the spine. */
+.ipb__spine {
+  right: auto;
+  width: 6.5%;
+  background: linear-gradient(
+    to right,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.16) 30%,
+    rgba(0, 0, 0, 0.3) 52%,
+    rgba(255, 255, 255, 0.09) 60%,
+    rgba(255, 255, 255, 0.02) 72%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
+/* Turned edge of the board: a lit top edge, a dark tail. */
+.ipb__rim {
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.16),
+    inset -1px 0 0 0 rgba(255, 255, 255, 0.06),
+    inset 0 -1.5px 0 0 rgba(0, 0, 0, 0.34),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+/* Light running across the cover as it starts to lift. Driven from script. */
+.ipb__glint {
+  left: -60%;
+  right: -60%;
+  background: linear-gradient(
+    102deg,
+    rgba(255, 255, 255, 0) 38%,
+    rgba(255, 255, 255, 0.1) 45%,
+    rgba(255, 255, 255, 0.26) 50%,
+    rgba(255, 255, 255, 0.1) 55%,
+    rgba(255, 255, 255, 0) 62%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+}
+
+/* Darkening of a face as it turns from the light. Driven from script. */
+.ipb__shade {
+  background: #000;
+  opacity: 0;
+}
+
+.ipb[data-chrome="bare"] .ipb__sheen,
+.ipb[data-chrome="bare"] .ipb__spine,
+.ipb[data-chrome="bare"] .ipb__rim {
+  display: none;
+}
+
+/* Thickness of the cover board, seen when it stands on edge. */
+.ipb__thickness {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 100%;
+  width: 3px;
+  margin-left: -1.5px;
+  background: linear-gradient(to bottom, var(--cover), var(--cover-edge));
+  transform: rotateY(90deg);
+  pointer-events: none;
+}
+.ipb:not([data-state="opening"]):not([data-state="closing"]) .ipb__thickness {
+  display: none;
+}
+
+/* Inside of the front cover: what rides on it. Local coordinates: the spine is on the right. */
+.ipb__rider,
+.ipb__turned {
+  position: absolute;
+  top: var(--ipb-iy);
+  bottom: var(--ipb-iy);
+  left: var(--ipb-ix);
+  right: 0;
+}
+
+/* Sheets already turned (single-page mode): the top one shows its back. */
+.ipb__turned {
+  display: none;
+  border-radius: var(--r-page) 0 0 var(--r-page);
+  box-shadow:
+    -1px 0 0 0 var(--paper-edge),
+    -2px 0.5px 0 0 var(--paper),
+    -3px 1px 0 0 var(--paper-edge);
+}
+.ipb__turned::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(to right, rgba(var(--ipb-shade-rgb), 0.02), rgba(var(--ipb-shade-rgb), 0.1)),
+    var(--page-dim);
+}
+.ipb[data-mode="single"][data-leafed] .ipb__turned {
+  display: block;
+}
+
+.ipb-leaf--rider {
+  position: absolute;
+  inset: 0;
+}
+
+/* Spine shading on the inside of the cover: the left half of .ipb__gutter, for while the cover is in the air. */
+.ipb__inner-gutter {
+  left: auto;
+  width: 13%;
+  background: linear-gradient(
+    to left,
+    rgba(var(--ipb-shade-rgb), 0.3) 0%,
+    rgba(var(--ipb-shade-rgb), 0.15) 12%,
+    rgba(var(--ipb-shade-rgb), 0.06) 38%,
+    rgba(var(--ipb-shade-rgb), 0.015) 72%,
+    rgba(var(--ipb-shade-rgb), 0) 100%
+  );
+}
+/* At rest in a spread the gutter over the pages takes over. */
+.ipb[data-state="open"][data-mode="double"] .ipb__inner-gutter {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Back of the closed passport                                         */
+/* ------------------------------------------------------------------ */
+
+.ipb__back-face {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc((var(--ipb-n) - 1) * 50%);
+  width: calc(100% / var(--ipb-n));
+  overflow: hidden;
+  border-radius: var(--r-passport) 3px 3px var(--r-passport);
+  z-index: 7;
+  box-shadow:
+    0 1px 0 0 var(--cover-edge),
+    -0.5px 2px 0 0 color-mix(in srgb, var(--cover-deep) 70%, black),
+    var(--passport-shadow);
+  visibility: hidden;
+  cursor: pointer;
+  touch-action: pan-y;
+  outline: none;
+}
+
+.ipb__back-face:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 5px;
+}
+
+.ipb__back-face .ipb__spine {
+  left: auto;
+  right: 0;
+  transform: scaleX(-1);
+}
+
+.ipb[data-side="back"] .ipb__back-face {
+  visibility: visible;
+  pointer-events: auto;
+}
+.ipb[data-side="back"] .ipb__book > :not(.ipb__back-face) {
+  visibility: hidden;
+}
+
+/* ------------------------------------------------------------------ */
+/* Misc                                                                */
+/* ------------------------------------------------------------------ */
+
+.ipb__live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

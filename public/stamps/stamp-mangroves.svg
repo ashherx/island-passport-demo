@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="none" stroke="#000" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+<!-- Placeholder line art for the Island Passport demo. Replaced by generated PNG ink masks. -->
+<path d="M58 98 C36 98 30 70 52 62 C48 38 82 26 98 44 C110 22 150 24 156 48 C184 40 208 66 188 88 C202 104 180 120 164 108 C150 122 124 120 118 106 C102 120 66 116 58 98 Z"/>
+<g stroke-width="4.5">
+  <path d="M70 76 q8 -10 18 -4 M100 62 q8 -10 18 -4 M134 60 q8 -10 18 -4 M160 80 q8 -10 18 -4 M88 94 q8 -10 18 -4 M128 90 q8 -10 18 -4"/>
+</g>
+<path d="M108 112 C112 128 110 140 102 152 M132 110 C128 128 130 140 138 152"/>
+<path d="M102 152 C80 156 60 174 52 197"/>
+<path d="M106 154 C94 166 86 182 84 197"/>
+<path d="M116 150 C114 170 112 184 112 197"/>
+<path d="M124 150 C126 170 130 184 132 197"/>
+<path d="M134 154 C146 164 154 180 158 197"/>
+<path d="M138 152 C160 154 180 174 190 197"/>
+<path d="M92 126 C80 136 74 152 72 168 M150 124 C164 134 170 150 172 166" stroke-width="4.5"/>
+<path d="M10 200 q11 -9 22 0 t22 0 t22 0 t22 0 t22 0 t22 0 t22 0 t22 0 t22 0 t22 0" stroke-width="5"/>
+<g stroke-width="4.5">
+  <path d="M40 216 H92 M112 216 H204 M72 230 H168"/>
+  <path d="M26 196 V172 M26 180 q-9 -4 -11 -14 M26 176 q9 -4 11 -14"/>
+  <path d="M214 196 V176 M214 184 q-8 -4 -10 -12 M214 180 q8 -4 10 -12"/>
+  <path d="M190 30 q7 -8 14 0 q7 -8 14 0"/>
+</g>
+</svg>
