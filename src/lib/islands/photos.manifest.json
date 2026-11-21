@@ -19,6 +19,206 @@
       ],
       "color": "#665533",
       "blur": "data:image/webp;base64,UklGRnAAAABXRUJQVlA4IGQAAADwAwCdASoYAA4APt1iqUyopiQiMAgBEBuJZgCdAGXz6vP/rYd2JuqAAOH8konyS+K1+0fOBR/GnOJtuoO1baD5SNH4D0kwNyEhSp+p09/Z5SDgljF11FLtpLBuTBFV0lGoAAAA"
+    },
+    "bohol-chocolate-hills": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-chocolate-hills-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-chocolate-hills-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-chocolate-hills-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#69592d",
+      "blur": "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAAAwBACdASoYAA4APt1apkyopSOiMAgBEBuJbACdL1Ds/wHvAApdS1Fs3gAA/rQkfZ0vTVcCLtNqHFjmet+Hp4z+ovrql8wBay8o2QjgMQGds5SmUCh0WN16TjaQyRnYswXU5/+du2wAAA=="
+    },
+    "bohol-alona-beach": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-alona-beach-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-alona-beach-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-alona-beach-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#8ca2a6",
+      "blur": "data:image/webp;base64,UklGRngAAABXRUJQVlA4IGwAAADwAwCdASoYAA4APt1cpkyopSOiMAgBEBuJZACdAB0zJX/ZVqTCFYFAAP6iqnHXbEPSPcmRt6CvbIe5133rbVT5gJroT39Dma4r3FVFTd7s5JezArnFuc73Gvl9VWpaJ5Oxr7hf8r+kpkVAAAA="
+    },
+    "bohol-balicasag-reef": {
+      "width": 1671,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-balicasag-reef-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-balicasag-reef-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-balicasag-reef-1671w.webp",
+          "width": 1671
+        }
+      ],
+      "color": "#387685",
+      "blur": "data:image/webp;base64,UklGRo4AAABXRUJQVlA4IIIAAAAwBQCdASoYAA4APt1apkyopSOiMAgBEBuJbACdMoR3N6TEgNuMA2SRaJDTrqfau7VTgAD+e7TmFS6dlvmsDRB3nYnlPz9hYARXEPwZFIQrN9Ei2NO6L0ffq646q+bAWEo98a6+H/4VkF6xozQq7id9FUOc0Cmft2PCxWJ+FlhBuAAA"
+    },
+    "bohol-tarsier": {
+      "width": 1536,
+      "height": 1024,
+      "sources": [
+        {
+          "file": "bohol-tarsier-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-tarsier-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-tarsier-1536w.webp",
+          "width": 1536
+        }
+      ],
+      "color": "#434b1b",
+      "blur": "data:image/webp;base64,UklGRoAAAABXRUJQVlA4IHQAAADQAwCdASoYABAAPt1apkyopSOiMAgBEBuJaACsABrHrTdmpm1v4AAA/uN+mjjDKeUcrVT4aU35nUfUiPkYuGM2df2QLQHyyMZ7ZTfJCXB95yvmBlemUfP0ERFj19LsgJHj1QICCdMY4zurgwn06RrA7m3AAA=="
+    },
+    "bohol-pamilacan-dolphins": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-pamilacan-dolphins-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-pamilacan-dolphins-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-pamilacan-dolphins-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#588cba",
+      "blur": "data:image/webp;base64,UklGRnQAAABXRUJQVlA4IGgAAAAwBACdASoYAA4APt1cpkyopSOiMAgBEBuJZgCdMoKP+AtUo018V5Lc2gAA/rIjnlKFEhP5wnka1IhS41efj8gbRKTr8jj+G3rhp1wSShKGRKxcjez60Q2284JAOTlTQJJvxrLCfpgAAA=="
+    },
+    "bohol-mangroves": {
+      "width": 1671,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-mangroves-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-mangroves-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-mangroves-1671w.webp",
+          "width": 1671
+        }
+      ],
+      "color": "#626933",
+      "blur": "data:image/webp;base64,UklGRnIAAABXRUJQVlA4IGYAAABwAwCdASoYAA4APt1apkyopSOiMAgBEBuJaAAALbhJ6zwioWAA/nc2j43D+hpnYIpKjGgzrelgAj//XrUl/eZhikZTodxVxLITuxSDyUzk564Fbb3aYTbdAoiLbk/9VmnfQMTCuAA="
+    },
+    "bohol-reef-aerial": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-reef-aerial-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-reef-aerial-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-reef-aerial-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#3c8ca3",
+      "blur": "data:image/webp;base64,UklGRoIAAABXRUJQVlA4IHYAAACQBACdASoYAA4APt1cp0yopSOiMAgBEBuJagCdMoMYAEl+REoTYhlOfE5M0PAA/eJOGS0/jQUFOBRVjx0/lpaQnxgRmR39er0MpRli08ncXqhFWfeBDBfISR/55MFxY7IbJnXfm8X3y76pkKmrm0cxDxbgKgAA"
+    },
+    "bohol-coral-closeup": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-coral-closeup-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-coral-closeup-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-coral-closeup-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#696e4f",
+      "blur": "data:image/webp;base64,UklGRpwAAABXRUJQVlA4IJAAAACwBACdASoYAA4APt1apkyopSOiMAgBEBuJbACdMoRwHvVAUwdZCeSmXVIOACUgAO1beXfUZtWO3iM6+qf5HbLjnzqhhizX0R61UaKDCP9mwKoLt7vgbqik3JpC6v2XORoa96MgKioMT49m6/4QzL3woAes4XBPJOLYBnmpZBDz3tRmHEA8CtfpLQ9Qc8FrAAA="
+    },
+    "bohol-conservation": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-conservation-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-conservation-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-conservation-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#9ca897",
+      "blur": "data:image/webp;base64,UklGRpIAAABXRUJQVlA4IIYAAAAwBACdASoYAA4APt1cpkyopSOiMAgBEBuJYgC7BagBc6KAid4hO4Gut8AA/PK6XYUEI691CNE5TMn6O63NmA/6YshZITPTUUwegV3X4sH/26DF1hM6gf7yB+w9LSh+ZxBLgSPOYG2HhXlCfKdxIczVnovLhpwJlNH3jItTLupwcmpP9QAAAA=="
+    },
+    "bohol-loboc-river": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-loboc-river-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-loboc-river-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-loboc-river-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#496843",
+      "blur": "data:image/webp;base64,UklGRnYAAABXRUJQVlA4IGoAAADwAwCdASoYAA4APt1cpkyopSOiMAgBEBuJYgCdMoAC8IujOo42r6YAAP7CM0agoxzGRdPPTobYOWyrFFaq5Nys/R61Gl9XppleoPR6/XcCtdoLOdslc3ECeBzG1QkY0MinLcAikfbul4AA"
     }
   }
 }
