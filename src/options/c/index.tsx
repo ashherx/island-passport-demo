@@ -32,7 +32,6 @@ import { cStrings } from "./strings";
 import { Rise, formatCoordinates, pad2, useReducedMotion, useViewportHeight, useWide } from "./ui";
 import "./option-c.css";
 
-const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
 /** Width of the left column on a desktop: the cover copy, then the card. */
 const COLUMN = 480;
 const COUNTRIES = new Set(ISLANDS.map((island) => island.countryCode)).size;

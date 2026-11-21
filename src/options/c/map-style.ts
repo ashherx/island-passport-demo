@@ -16,7 +16,7 @@
  * at globe altitude the sea is the same colour as the sphere, so it trims the coarse dot field to
  * the real coastline for free.
  */
-import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, GeoJSONSourceSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
 import type { StyleBase } from "@/components/globe";
 import { landDots } from "./land-dots";
 
@@ -465,7 +465,7 @@ export function optionCStyle(base: StyleBase): StyleSpecification {
     sky: { "atmosphere-blend": 0 },
     sources: {
       [base.sources.base]: { type: "vector", url: base.urls.tiles },
-      [DOTS_SOURCE]: { type: "geojson", data: landDots() as unknown as GeoJSON.FeatureCollection, maxzoom: 4, buffer: 8, tolerance: 0 },
+      [DOTS_SOURCE]: { type: "geojson", data: landDots() as unknown as GeoJSONSourceSpecification["data"], maxzoom: 4, buffer: 8, tolerance: 0 },
     },
     layers: [...baseLayers(base), ...islandLayers(base)],
   };
