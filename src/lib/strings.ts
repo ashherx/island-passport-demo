@@ -23,6 +23,8 @@ export const strings = {
     metaTitle: BIDDER ? `Island Passport motion prototype by ${BIDDER}` : "Island Passport: motion demo",
     metaDescription:
       "An interactive passport, the stamping moment and the Verified Supporter upgrade. Sample content for a design proposal.",
+    /** Under the name on the share card (opengraph-image.tsx). */
+    shareKind: "Motion prototype",
   },
 
   /** PUB-7: sample content is always labelled. */
@@ -350,7 +352,7 @@ export const strings = {
     /** Read by screen readers when the press starts; the moment itself is decorative. */
     skipHint: "Stamping. Tap or press Escape to skip.",
     sound: {
-      label: "Stamp sound",
+      label: "Sound",
       on: "Sound on",
       off: "Sound off",
     },
@@ -458,7 +460,8 @@ export const strings = {
       confirm: {
         short: "Confirm",
         cta: "Simulate: charity confirms",
-        note: "Later: the traveler donated on the charity's page with the same email, and the charity confirms it. The traveler does nothing else.",
+        /** Two lines at most at 390 px: the bar clamps the note there. */
+        note: "Later: the traveler donates on the charity's page with the same email and does nothing else. The charity confirms.",
         busy: "Confirming",
       },
     },
@@ -472,13 +475,15 @@ export const strings = {
       title: "Story complete",
       note: "Turn the pages, tap a stamp, switch the art direction.",
       cta: "Replay demo",
+      /** On the button while the book closes for a replay. */
+      busy: "Closing the passport",
     },
     replay: "Replay demo",
     replayShort: "Restart",
     skip: "Skip the animation",
     toast: {
-      pendingBody:
-        "The charity's own page would open now. Nothing is charged here; the stamp upgrades only when {charity} confirms.",
+      /** Two lines at most on a 390 px phone. The Donate note under the button says whose page opens. */
+      pendingBody: "Nothing is charged here. The stamp upgrades only when {charity} confirms.",
       reset: "Demo reset",
       resetBody: "The passport is back where it started.",
       dismiss: "Dismiss",

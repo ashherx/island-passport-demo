@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "maplibre-gl": "^5.24.1",
     "motion": "^14.14.0",
     "next": "15.5.29",
     "page-flip": "^2.0.7",

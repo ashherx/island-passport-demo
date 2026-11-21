@@ -1,0 +1,166 @@
+/* /lab/globe-core. Prefix gcl-. */
+
+.gcl {
+  display: grid;
+  grid-template-rows: 58dvh auto;
+  min-height: 100dvh;
+  background: linear-gradient(180deg, var(--o-bg), var(--o-bg-alt));
+  color: var(--o-ink);
+  font-family: var(--nf-hanken, system-ui), system-ui, sans-serif;
+  color-scheme: light;
+}
+
+.gcl-stage {
+  position: relative;
+  min-height: 0;
+}
+
+.gcl-card {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 220px;
+  border-radius: 20px 20px 0 0;
+  background: color-mix(in srgb, var(--o-surface) 86%, transparent);
+  box-shadow: 0 -8px 30px rgba(10, 30, 40, 0.12);
+  pointer-events: none;
+}
+
+.gcl-panel {
+  padding: 18px 16px 90px;
+  border-top: 1px solid var(--o-line);
+  background: var(--o-surface);
+}
+
+.gcl-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.gcl-blurb {
+  margin: 4px 0 14px;
+  color: var(--o-ink-muted);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.gcl-h {
+  margin: 18px 0 8px;
+  color: var(--o-ink-muted);
+  font: 600 11px/1 var(--nf-plex-mono, ui-monospace), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gcl-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.gcl-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--o-line);
+  border-radius: 999px;
+  background: var(--o-surface);
+  color: var(--o-ink);
+  font: 600 13.5px/1 inherit;
+  cursor: pointer;
+}
+
+.gcl-btn[data-status="coming-soon"] {
+  color: var(--o-ink-muted);
+  border-style: dashed;
+}
+
+.gcl-btn[aria-pressed="true"],
+.gcl-btn[data-kind="primary"] {
+  border-color: var(--o-accent);
+  background: var(--o-accent);
+  color: var(--o-accent-ink);
+}
+
+.gcl-btn:focus-visible {
+  outline: 2px solid var(--o-accent);
+  outline-offset: 2px;
+}
+
+.gcl-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 4px;
+  font-size: 13.5px;
+}
+
+.gcl-fps {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--o-accent-soft);
+  color: var(--o-ink);
+  font: 500 12.5px/1.6 var(--nf-plex-mono, ui-monospace), ui-monospace, monospace;
+  white-space: pre-wrap;
+}
+
+.gcl-fps[data-slow] {
+  background: color-mix(in srgb, var(--o-second) 22%, var(--o-surface));
+}
+
+.gcl-log {
+  margin: 8px 0 0;
+  color: var(--o-ink-muted);
+  font: 500 12.5px/1.5 var(--nf-plex-mono, ui-monospace), ui-monospace, monospace;
+  overflow-wrap: anywhere;
+}
+
+.gcl-shot {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-top: 12px;
+  border: 1px solid var(--o-line);
+  border-radius: 12px;
+}
+
+.gcl-marker {
+  display: block;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid var(--o-accent);
+  border-radius: 50%;
+  opacity: 0.55;
+}
+
+.gcl-marker[data-selected="true"] {
+  opacity: 1;
+  border-width: 2.5px;
+}
+
+@media (min-width: 900px) {
+  .gcl {
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    height: 100dvh;
+  }
+
+  .gcl-panel {
+    overflow-y: auto;
+    border-top: 0;
+    border-left: 1px solid var(--o-line);
+    padding: 24px 22px 40px;
+  }
+
+  .gcl-card {
+    top: 0;
+    right: auto;
+    width: 340px;
+    height: auto;
+    border-radius: 0 20px 20px 0;
+  }
+}

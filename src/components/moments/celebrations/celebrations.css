@@ -1,8 +1,10 @@
 /*
  * Styles for the celebration moments (StatusUpgrade, ProvincialAward) and the status chip.
  * Imported by the components that need it. Everything is prefixed "ipc-" and uses the design
- * tokens from src/lib/directions.ts. Animations are transform, opacity or (briefly, on small
- * elements) mask-position.
+ * tokens from src/lib/directions.ts. Animations are transform or opacity. The one exception is
+ * the 0.46 s light band on the Verified seal (.ipc-sweep, mask-position on a seal-sized element).
+ * Reduced motion is decided in the components (they do not render the moving parts), so a host
+ * can force it on or off; the media query at the end only covers the CSS-only status chip.
  */
 
 /* ------------------------------------------------------------------ */
@@ -176,10 +178,11 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Foil light sweep (shared)                                           */
+/* Foil light sweeps                                                   */
 /* ------------------------------------------------------------------ */
 
-/* A soft diagonal band that reveals whatever is inside it, travelling left to right. */
+/* A soft diagonal band that reveals whatever is inside it, travelling left to right, once.
+   Used on the Verified seal only: a seal-sized element for under half a second. */
 .ipc-sweep {
   -webkit-mask-image: linear-gradient(112deg, transparent 39%, #000 50%, transparent 61%);
   mask-image: linear-gradient(112deg, transparent 39%, #000 50%, transparent 61%);
@@ -196,10 +199,6 @@
   animation: ipc-sweep var(--sweep-duration, 0.85s) cubic-bezier(0.35, 0.1, 0.3, 1) var(--sweep-delay, 0s) both;
 }
 
-.ipc-sweep[data-run="loop"] {
-  animation: ipc-sweep-loop 3.8s cubic-bezier(0.35, 0.1, 0.3, 1) var(--sweep-delay, 0s) infinite both;
-}
-
 @keyframes ipc-sweep {
   from {
     -webkit-mask-position: 100% 0;
@@ -211,15 +210,31 @@
   }
 }
 
-@keyframes ipc-sweep-loop {
+/*
+ * The award's light bands: a slanted gradient bar that slides across a clipped parent. Only its
+ * transform animates, so the pass is composited and nothing under it is repainted. Two passes,
+ * then it rests off the far side.
+ */
+.ipc-band {
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 60%;
+  height: 140%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, var(--band, #fff) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: translate3d(-150%, 0, 0) skewX(-22deg);
+  will-change: transform;
+  pointer-events: none;
+  animation: ipc-band 3.8s cubic-bezier(0.35, 0.1, 0.3, 1) var(--band-delay, 0s) 2 both;
+}
+
+@keyframes ipc-band {
   0% {
-    -webkit-mask-position: 100% 0;
-    mask-position: 100% 0;
+    transform: translate3d(-150%, 0, 0) skewX(-22deg);
   }
   26%,
   100% {
-    -webkit-mask-position: 0% 0;
-    mask-position: 0% 0;
+    transform: translate3d(222%, 0, 0) skewX(-22deg);
   }
 }
 
@@ -300,6 +315,8 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
+  /* Not layout: read by the component to keep the lifted stamp below the notch. */
+  padding-top: env(safe-area-inset-top, 0px);
   overflow: hidden;
   color: var(--award-fg);
   font-family: var(--ff-body);
@@ -312,6 +329,7 @@
   position: absolute;
   inset: 0;
   background: var(--award-backdrop);
+  will-change: opacity;
 }
 
 .ipc-award__rays {
@@ -332,7 +350,13 @@
   background: repeating-conic-gradient(from 0deg, var(--award-ray) 0deg, transparent 5deg, transparent 13deg, var(--award-ray) 18deg);
   -webkit-mask-image: radial-gradient(closest-side, #000 0%, rgba(0, 0, 0, 0.7) 44%, transparent 82%);
   mask-image: radial-gradient(closest-side, #000 0%, rgba(0, 0, 0, 0.7) 44%, transparent 82%);
+  will-change: transform;
   animation: ipc-spin 70s linear infinite;
+}
+
+/* Once "Add to passport" is tapped the rays fade out: stop turning them. */
+.ipc-award:not([data-phase="enter"]) .ipc-award__rays i {
+  animation-play-state: paused;
 }
 
 @keyframes ipc-spin {
@@ -356,7 +380,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: max(56px, env(safe-area-inset-top)) 28px max(28px, env(safe-area-inset-bottom));
+  /* The bottom keeps clear of the sample tag. */
+  padding: max(40px, calc(env(safe-area-inset-top, 0px) + 12px)) 28px max(40px, calc(env(safe-area-inset-bottom, 0px) + 36px));
   text-align: center;
 }
 
@@ -382,15 +407,45 @@
   opacity: 0.6;
 }
 
+/* Narrow phones: the rules either side would push the line onto two rows. */
+@media (max-width: 359px) {
+  .ipc-award__eyebrow::before,
+  .ipc-award__eyebrow::after {
+    display: none;
+  }
+}
+
 .ipc-award__slot {
   position: relative;
   flex: none;
 }
 
 .ipc-award__flyer,
-.ipc-award__rise {
+.ipc-award__rise,
+.ipc-award__medalwrap,
+.ipc-award__stamp {
   position: absolute;
   inset: 0;
+}
+
+/* The flight and the hand-over only move and fade these layers: nothing in them is repainted. */
+.ipc-award__flyer {
+  will-change: transform, opacity;
+}
+
+/* will-change: transform also pins the raster scale, so shrinking in flight re-rasters nothing. */
+.ipc-award__medalwrap {
+  will-change: transform, opacity;
+}
+
+/* Everything that fades with the dialog's chrome (copy, buttons, rays, glow) fades as a layer. */
+.ipc-award__ui {
+  will-change: opacity;
+}
+
+/* The stamp (with its ink filter) is rasterised once, into a layer of its own. */
+.ipc-award__stamp {
+  will-change: transform;
 }
 
 .ipc-award__glow {
@@ -431,19 +486,33 @@
   background: var(--page-dim);
 }
 
+/* Light crossing the medallion: a band inside a disc-shaped clip. */
 .ipc-award__gloss {
+  --band: rgba(255, 255, 255, 0.36);
   position: absolute;
   inset: -9.5%;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.34);
+  overflow: hidden;
+  pointer-events: none;
 }
 
+/* Light catching the foil: a white band seen only through the foil's own outline (a static mask). */
 .ipc-award__foilhi {
+  --band: rgba(255, 255, 255, 0.96);
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.ipc-award__copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .ipc-award__title {
@@ -471,7 +540,7 @@
   gap: 10px;
   min-width: 220px;
   height: 54px;
-  margin-top: clamp(22px, 4vh, 34px);
+  margin-top: clamp(18px, 3.4vh, 30px);
   padding: 0 28px;
   border: 0;
   border-radius: var(--r-chip);
@@ -501,23 +570,23 @@
   outline-offset: 3px;
 }
 
+/* The button clips the band to its own pill. */
 .ipc-award__cta-shine {
-  position: absolute;
-  inset: 0;
-  background: rgba(255, 255, 255, 0.6);
+  --band: rgba(255, 255, 255, 0.62);
 }
 
 .ipc-award__cta svg {
   flex: none;
 }
 
+/* Under the main button, out of reach of a tap aimed at the page header. */
 .ipc-award__skip {
-  position: absolute;
-  top: max(10px, env(safe-area-inset-top));
-  right: 10px;
-  min-width: 56px;
-  height: 44px;
-  padding: 0 14px;
+  position: relative;
+  display: block;
+  min-width: 96px;
+  min-height: 44px;
+  margin: 6px auto 0;
+  padding: 0 22px;
   border: 0;
   border-radius: var(--r-chip);
   background: none;
@@ -534,7 +603,7 @@
 .ipc-award__sample {
   position: absolute;
   left: 50%;
-  bottom: max(12px, env(safe-area-inset-bottom));
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   padding: 0.15em 0.6em;
   border: 1px solid var(--award-line);
@@ -545,6 +614,7 @@
   letter-spacing: 0.14em;
   line-height: 1.5;
   text-transform: uppercase;
+  white-space: nowrap;
   opacity: 0.75;
   pointer-events: none;
 }
@@ -555,21 +625,135 @@
   pointer-events: none;
 }
 
+/* One glint across the fresh impression: a foil-light band inside a disc-shaped clip. */
+.ipc-award__glint {
+  position: absolute;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ipc-award__glint i {
+  position: absolute;
+  top: -15%;
+  left: 0;
+  width: 46%;
+  height: 130%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    color-mix(in srgb, var(--foil-hi) 55%, rgba(255, 255, 255, 0.85)) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  will-change: transform;
+}
+
+/*
+ * Phones on their side: the portrait stack does not fit, so the seal goes left and the copy and
+ * the buttons go right. The stage is sized against the small viewport (browser bars showing), so
+ * "Add to passport" is always on screen; if the copy still cannot fit, that column scrolls.
+ */
+@media (max-height: 480px) and (orientation: landscape) {
+  .ipc-award__stage {
+    display: grid;
+    grid-template-columns: auto minmax(0, 21rem);
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "seal eyebrow"
+      "seal copy";
+    align-content: center;
+    justify-content: center;
+    align-items: center;
+    column-gap: clamp(28px, 7vw, 64px);
+    padding: max(12px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px))
+      max(24px, env(safe-area-inset-left, 0px));
+  }
+
+  @supports (height: 100svh) {
+    .ipc-award__stage {
+      bottom: auto;
+      height: 100svh;
+    }
+  }
+
+  .ipc-award__stage > :first-child {
+    grid-area: eyebrow;
+    align-self: end;
+  }
+
+  .ipc-award__slot {
+    grid-area: seal;
+    margin-inline: 26px;
+  }
+
+  .ipc-award__eyebrow {
+    margin-bottom: 6px;
+  }
+
+  @media (max-width: 719px) {
+    .ipc-award__eyebrow::before,
+    .ipc-award__eyebrow::after {
+      display: none;
+    }
+  }
+
+  .ipc-award__copy {
+    grid-area: copy;
+    align-self: start;
+    /* Room for the eyebrow row and the stage padding. Scrolls only if it must. */
+    max-height: calc(100vh - 56px);
+    padding: 0 12px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    scrollbar-width: none;
+  }
+
+  @supports (height: 100svh) {
+    .ipc-award__copy {
+      max-height: calc(100svh - 56px);
+    }
+  }
+
+  .ipc-award__title {
+    margin-top: 0;
+    max-width: 12em;
+    font-size: clamp(22px, 6.4vh, 28px);
+  }
+
+  .ipc-award__body {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .ipc-award__cta {
+    height: 48px;
+    margin-top: 14px;
+  }
+
+  .ipc-award__skip {
+    margin-top: 2px;
+  }
+
+  .ipc-award__sample {
+    left: max(14px, env(safe-area-inset-left, 0px));
+    transform: none;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Reduced motion (UX-5)                                               */
 /* ------------------------------------------------------------------ */
 
+/* The moments decide reduced motion in JS (and leave the moving parts out). The chip is CSS only. */
 @media (prefers-reduced-motion: reduce) {
   .ipc-chip *,
   .ipc-chip::before {
     transition: none !important;
   }
-  .ipc-sweep,
-  .ipc-award__rays i {
-  display: block;
-    animation: none !important;
-  }
-  .ipc-award__cta {
-    transition: none;
-  }
+}
+
+.ipc-award[data-reduced="true"] .ipc-award__cta {
+  transition: none;
 }

@@ -20,10 +20,12 @@ export interface SlotOverride {
   /**
    * Added by the integrator. Draw this in the stamp box instead of the page's own <Stamp />, for a
    * moment that animates in place (the status upgrade). `px` is the size the page would draw the
-   * stamp at and `detail` the level of detail it would pass to <Stamp />. Keep the function
-   * identity stable: a new function re-renders the page.
+   * stamp at and `detail` the level of detail it would pass to <Stamp />: "compact" below 120 CSS
+   * px, "full" from there up ("auto" is no longer passed; it stays in the type for older callers).
+   * Pass both on, so the stamp does not change at hand-over. Keep the function identity stable: a
+   * new function re-renders the page.
    */
-  render?(px: number, detail: "full" | "auto"): ReactNode;
+  render?(px: number, detail: "compact" | "full" | "auto"): ReactNode;
   /** Added by the integrator. Drawn in the stamp box after the stamp (ink flecks, for example). */
   after?(px: number): ReactNode;
 }
@@ -33,6 +35,11 @@ export interface BuildPassportOptions {
   onStampSelect?(slot: StampSlot, stamp: Stamp): void;
   /** An empty slot was tapped. Without it empty slots are not interactive. */
   onEmptySlotSelect?(slot: StampSlot): void;
+  /**
+   * An island was tapped on the province page (a row of the island index or a marker on the
+   * chart). Without it the index and the chart are static, exactly as before.
+   */
+  onIslandSelect?(islandId: string): void;
   /** The awarded Provincial Stamp was tapped. */
   onProvincialSelect?(stamp: Stamp): void;
   slotOverrides?: Record<string, SlotOverride>;

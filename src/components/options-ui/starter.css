@@ -1,0 +1,281 @@
+/*
+ * The starter landing (StarterLanding.tsx): a plain reference built from the shared pieces.
+ * Prefix osl-. Options replace this with their own design; nothing else depends on it.
+ */
+
+.osl {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 50% 0%, var(--o-bg) 0%, transparent 70%),
+    linear-gradient(180deg, var(--o-bg) 0%, var(--o-bg-alt) 100%);
+  color: var(--o-ink);
+  --globe-halo: color-mix(in srgb, var(--o-halo) 92%, transparent);
+}
+
+.osl-globe {
+  position: absolute;
+  inset: 0;
+}
+
+.osl-top {
+  position: absolute;
+  z-index: 5;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 0;
+  pointer-events: none;
+}
+
+.osl-top > * {
+  pointer-events: auto;
+}
+
+.osl-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.osl-wordmark {
+  font: 700 17px/1 var(--nf-fraunces, var(--nf-cormorant, Georgia)), Georgia, serif;
+  letter-spacing: 0.01em;
+}
+
+.osl-sample {
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--o-ink) 22%, transparent);
+  border-radius: 999px;
+  color: var(--o-ink-muted);
+  font: 600 9.5px/1.6 var(--nf-plex-mono, ui-monospace), ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.osl-hint {
+  position: absolute;
+  z-index: 4;
+  left: 0;
+  right: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  margin: 0;
+  color: var(--o-ink-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Marker: a soft pulse around each live island's dot. */
+.osl-pulse {
+  position: relative;
+  display: block;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}
+
+.osl-pulse::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1.5px solid var(--o-accent);
+  border-radius: 50%;
+  opacity: 0;
+  animation: osl-pulse 2.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.ipg-marker[data-near="true"] .osl-pulse::before {
+  animation: none;
+}
+
+@keyframes osl-pulse {
+  0% {
+    opacity: 0.75;
+    transform: scale(0.45);
+  }
+  80%,
+  100% {
+    opacity: 0;
+    transform: scale(1.25);
+  }
+}
+
+/* Card: a bottom sheet on a phone, a side panel on a desktop. */
+.osl-card {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 44dvh;
+  padding: 18px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 24px 24px 0 0;
+  background: var(--o-surface);
+  box-shadow: 0 -12px 40px rgba(10, 30, 40, 0.14);
+  transform: translateY(104%);
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.osl-card[data-open] {
+  transform: none;
+}
+
+.osl-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--o-ink) 6%, transparent);
+  color: var(--o-ink);
+  cursor: pointer;
+}
+
+.osl-close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.osl-close:focus-visible,
+.osl-cta:focus-visible,
+.osl-ghost:focus-visible {
+  outline: 2px solid var(--o-accent);
+  outline-offset: 2px;
+}
+
+.osl-status {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--o-accent-soft);
+  color: var(--o-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.osl-status[data-status="coming-soon"] {
+  background: color-mix(in srgb, var(--o-ink) 7%, transparent);
+  color: var(--o-ink-muted);
+}
+
+.osl-name {
+  margin: 0;
+  padding-right: 44px;
+  font: 700 30px/1.1 var(--nf-fraunces, var(--nf-cormorant, Georgia)), Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+.osl-place {
+  margin: 4px 0 0;
+  color: var(--o-ink-muted);
+  font-size: 13.5px;
+}
+
+.osl-tagline {
+  margin: 10px 0 14px;
+  font-size: 15.5px;
+  line-height: 1.45;
+}
+
+.osl-photo {
+  border-radius: 16px;
+}
+
+.osl-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.osl-cta,
+.osl-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font: 650 15px/1 inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.osl-cta {
+  flex: 1;
+  border: 0;
+  background: var(--o-accent);
+  color: var(--o-accent-ink);
+}
+
+.osl-ghost {
+  border: 1px solid var(--o-line);
+  background: var(--o-surface);
+  color: var(--o-ink);
+}
+
+.osl-note {
+  margin: 12px 0 0;
+  color: var(--o-ink-muted);
+  font-size: 12px;
+}
+
+@media (min-width: 900px) {
+  .osl-top {
+    justify-items: start;
+    padding: 24px 28px 0;
+  }
+
+  .osl-search {
+    width: 380px;
+  }
+
+  .osl-hint {
+    bottom: 28px;
+  }
+
+  .osl-card {
+    top: 132px;
+    left: 28px;
+    right: auto;
+    bottom: 28px;
+    width: 396px;
+    max-height: none;
+    padding: 24px;
+    border-radius: 24px;
+    box-shadow:
+      0 2px 6px rgba(10, 30, 40, 0.06),
+      0 24px 60px rgba(10, 30, 40, 0.16);
+    transform: translateX(-112%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .osl-card {
+    transition: opacity 0.2s;
+    transform: none;
+    opacity: 0;
+  }
+  .osl-card[data-open] {
+    opacity: 1;
+  }
+  .osl-pulse::before {
+    animation: none;
+    opacity: 0.5;
+    transform: none;
+  }
+}

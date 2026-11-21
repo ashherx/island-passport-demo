@@ -6,8 +6,8 @@
  *   and every part of the book is positioned from it.
  *
  * Motion is not in this file. The cover swing writes transform/opacity from PassportBook.tsx
- * while data-state is "opening" or "closing"; the rules here are the two rest poses those
- * animations start and end on. Page flips are styled inline by StPageFlip and flip-engine.ts.
+ * while data-state is "opening" or "closing" (and during the opening beat, data-attract); the
+ * rules here are the two rest poses those animations start and end on. Page flips are styled inline by StPageFlip and flip-engine.ts.
  *
  * Tunable from outside (set on .ipb or any ancestor):
  *   --ipb-ratio    page width / height                     default 0.68
@@ -458,6 +458,14 @@
 }
 .ipb[data-state="opening"] :is(.ipb__shade, .ipb__glint, .ipb__sweep, .ipb__cast),
 .ipb[data-state="closing"] :is(.ipb__shade, .ipb__glint, .ipb__sweep, .ipb__cast) {
+  will-change: transform, opacity;
+}
+/* The same for the opening beat (the cover's fore edge lifts once while the book stays "closed";
+   PassportBook.tsx sets data-attract for as long as it lasts). */
+.ipb[data-attract] :is(.ipb__book, .ipb__hinge, .ipb__face) {
+  will-change: transform;
+}
+.ipb[data-attract] :is(.ipb__shade, .ipb__glint, .ipb__sweep) {
   will-change: transform, opacity;
 }
 

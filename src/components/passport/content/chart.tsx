@@ -77,6 +77,8 @@ export interface ProvinceChartArtProps {
   activeId?: string;
   /** Print island names beside the markers. */
   labels?: boolean;
+  /** Locator only: the marker pulses once (after a short delay, so a page turn can finish first). */
+  pulse?: boolean;
   title?: string;
   className?: string;
   style?: CSSProperties;
@@ -90,7 +92,7 @@ const LABEL_OFFSET: Record<ChartPlace["label"], { dx: number; dy: number; anchor
 };
 
 /** Inline SVG. Colours come from CSS (see .ipp-chart in content.css). */
-export function ProvinceChartArt({ chart, markers, activeId, labels = false, title, className, style }: ProvinceChartArtProps) {
+export function ProvinceChartArt({ chart, markers, activeId, labels = false, pulse = false, title, className, style }: ProvinceChartArtProps) {
   const locator = activeId !== undefined;
   return (
     <svg
@@ -101,6 +103,7 @@ export function ProvinceChartArt({ chart, markers, activeId, labels = false, tit
       aria-label={title}
       aria-hidden={title ? undefined : true}
       data-locator={locator ? "" : undefined}
+      data-pulse={locator && pulse ? "" : undefined}
     >
       {chart.reefs.map((d) => (
         <path key={d} d={d} className="ipp-chart__reef" />
@@ -134,6 +137,44 @@ export function ProvinceChartArt({ chart, markers, activeId, labels = false, tit
         );
       })}
     </svg>
+  );
+}
+
+export interface ChartHotspotsProps {
+  chart: ProvinceChart;
+  markers: ChartMarker[];
+  /** Accessible name of a marker's button. */
+  label(marker: ChartMarker): string;
+  onSelect(islandId: string): void;
+}
+
+/**
+ * Tap targets over the markers of a <ProvinceChartArt>: real buttons, so the page-flip engine
+ * forwards the tap instead of starting a page turn. Lay it over the chart in a positioned box of
+ * the same size. The buttons repeat the island index below the chart, so they stay out of the
+ * tab order (the index rows are the keyboard path).
+ */
+export function ChartHotspots({ chart, markers, label, onSelect }: ChartHotspotsProps) {
+  const [, , width = 200, height = 150] = chart.viewBox.split(/\s+/).map(Number);
+  return (
+    <div className="ipp-chart-hits">
+      {markers.map((m) => {
+        const place = chart.places[m.id];
+        if (!place) return null;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            className="ipp-chart-hit"
+            tabIndex={-1}
+            aria-label={label(m)}
+            data-island-id={m.id}
+            style={{ left: `${(place.x / width) * 100}%`, top: `${(place.y / height) * 100}%` }}
+            onClick={() => onSelect(m.id)}
+          />
+        );
+      })}
+    </div>
   );
 }
 

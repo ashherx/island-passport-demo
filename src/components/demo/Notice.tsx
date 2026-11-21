@@ -49,7 +49,7 @@ export function Notice({ notice, onDismiss, reduced: reducedProp }: NoticeProps)
             // on the page, so the entrance stays out of the way.
             initial={reduced ? { opacity: 0 } : { opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8, transition: { duration: 0.18 } }}
+            exit={reduced ? { opacity: 0, transition: { duration: 0.18 } } : { opacity: 0, y: -8, transition: { duration: 0.18 } }}
             transition={{ type: "spring", stiffness: 420, damping: 30 }}
           >
             <span className="ipd-notice__mark" aria-hidden="true" />

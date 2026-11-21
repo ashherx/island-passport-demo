@@ -19,7 +19,7 @@ import {
   type StampSlot,
   type StampStatus,
 } from "@/lib/types";
-import { ProvinceChartArt, getChart, type ChartMarker } from "./chart";
+import { ChartHotspots, ProvinceChartArt, getChart, type ChartMarker } from "./chart";
 import { sameChrome, u } from "./IslandPage";
 import { Page, usePageMetrics, useStampPx, type PageChromeProps } from "./PageFrame";
 import { contentStrings as cs } from "./strings";
@@ -175,6 +175,8 @@ export interface ProvincePageProps {
   markers: ChartMarker[];
   overrides?: Record<string, SlotOverride>;
   chrome: PageChromeProps;
+  /** An island row or chart marker was tapped. Without it the index and the chart are static. */
+  onIslandSelect?(islandId: string): void;
 }
 
 /** A dot per slot: the status mark in miniature (STM-7: outline, dashed, solid). */
@@ -188,23 +190,34 @@ function slotStatus(slot: StampSlot, overrides?: Record<string, SlotOverride>): 
   return o?.status ?? slot.stamp.status;
 }
 
+/** Height of an island index row in units. Rows that can be tapped are a little taller. */
+const ROW_UNITS = 23;
+const ROW_UNITS_TAPPABLE = 26;
+
 /** Chart width in units: as large as the page height allows once the title, index and key are in. */
-function chartUnits(unitsHigh: number, rowCount: number): number {
-  const room = unitsHigh - 222 - rowCount * 23;
+function chartUnits(unitsHigh: number, rowCount: number, rowUnits: number): number {
+  const room = unitsHigh - 222 - rowCount * rowUnits;
   return Math.round(Math.min(256, Math.max(150, room / 0.75)));
 }
 
-function ProvinceFigure({ rows, children }: { rows: number; children: ReactNode }) {
+function ProvinceFigure({ rows, rowUnits, children }: { rows: number; rowUnits: number; children: ReactNode }) {
   const { unitsHigh } = usePageMetrics();
   return (
-    <figure className="ipp-province__chart" style={{ width: u(chartUnits(unitsHigh, rows)) }}>
+    <figure className="ipp-province__chart" style={{ width: u(chartUnits(unitsHigh, rows, rowUnits)) }}>
       {children}
     </figure>
   );
 }
 
-function ProvincePageImpl({ province, country, rows, markers, overrides, chrome }: ProvincePageProps) {
+function ProvincePageImpl({ province, country, rows, markers, overrides, chrome, onIslandSelect }: ProvincePageProps) {
   const chart = getChart(province);
+  const tappable = Boolean(onIslandSelect);
+  const rowLabel = (islandId: string): string => {
+    const row = rows.find((r) => r.island.id === islandId);
+    if (!row) return "";
+    const collected = row.slots.filter((s) => slotStatus(s, overrides) !== "empty").length;
+    return t(cs.province.rowAria, { island: row.island.name, n: collected, total: row.slots.length, page: row.page });
+  };
   return (
     <Page
       {...chrome}
@@ -223,32 +236,26 @@ function ProvincePageImpl({ province, country, rows, markers, overrides, chrome 
         </div>
 
         {chart && (
-          <ProvinceFigure rows={rows.length}>
+          <ProvinceFigure rows={rows.length} rowUnits={tappable ? ROW_UNITS_TAPPABLE : ROW_UNITS}>
             <ProvinceChartArt
               chart={chart}
               markers={markers}
               labels
               title={t(cs.province.mapAria, { province, n: markers.length })}
             />
+            {onIslandSelect && (
+              <ChartHotspots chart={chart} markers={markers} label={(m) => rowLabel(m.id)} onSelect={onIslandSelect} />
+            )}
             <figcaption>{cs.province.mapNote}</figcaption>
           </ProvinceFigure>
         )}
 
-        <ol className="ipp-index" aria-label={cs.province.islandsLabel}>
+        <ol className="ipp-index" aria-label={cs.province.islandsLabel} data-tappable={tappable ? "" : undefined}>
           {rows.map((row, i) => {
             const statuses = row.slots.map((s) => slotStatus(s, overrides));
-            const collected = statuses.filter((s) => s !== "empty").length;
-            return (
-              <li
-                key={row.island.id}
-                className="ipp-index__row"
-                aria-label={t(cs.province.rowAria, {
-                  island: row.island.name,
-                  n: collected,
-                  total: row.slots.length,
-                  page: row.page,
-                })}
-              >
+            const label = rowLabel(row.island.id);
+            const cells = (
+              <>
                 <span className="ipp-index__num" aria-hidden="true">
                   {i + 1}
                 </span>
@@ -264,6 +271,27 @@ function ProvincePageImpl({ province, country, rows, markers, overrides, chrome 
                 <span className="ipp-index__page" aria-hidden="true">
                   {String(row.page).padStart(2, "0")}
                 </span>
+              </>
+            );
+            if (!onIslandSelect) {
+              return (
+                <li key={row.island.id} className="ipp-index__row" aria-label={label}>
+                  {cells}
+                </li>
+              );
+            }
+            // A real button: the page-flip engine forwards taps on buttons instead of turning the page.
+            return (
+              <li key={row.island.id} className="ipp-index__item">
+                <button
+                  type="button"
+                  className="ipp-index__row ipp-index__btn"
+                  aria-label={label}
+                  data-island-id={row.island.id}
+                  onClick={() => onIslandSelect(row.island.id)}
+                >
+                  {cells}
+                </button>
               </li>
             );
           })}
@@ -290,6 +318,7 @@ export const ProvincePage = memo(ProvincePageImpl, (a, b) => {
     a.province !== b.province ||
     a.country !== b.country ||
     a.rows.length !== b.rows.length ||
+    a.onIslandSelect !== b.onIslandSelect ||
     !sameChrome(a.chrome, b.chrome)
   ) {
     return false;

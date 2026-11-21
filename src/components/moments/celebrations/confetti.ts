@@ -1,7 +1,12 @@
 /**
- * Restrained confetti for the Provincial Stamp award (UX-4): one burst of tiny stamps, leaves,
- * waves and foil sparks on a 2D canvas. Sprites are drawn once to offscreen canvases, so a frame
- * is a few dozen drawImage calls. Hard-stops and clears itself after `duration` (max 1.8s).
+ * Confetti for the Provincial Stamp award (UX-4): tiny stamps, leaves, waves and foil sparks on a
+ * 2D canvas, in three depth layers (far pieces are small, dim and slow; near ones large and quick).
+ * A main burst, then a smaller second one a quarter of a second later. Pieces are thrown hard and
+ * meet strong drag, so the burst opens fast and then floats down.
+ *
+ * Sprites are drawn once to offscreen canvases, so a frame is about a hundred drawImage calls.
+ * Hard-stops and clears itself after `duration` (max 1.8s). Reduced motion is the caller's switch:
+ * do not call this at all (ProvincialAward does not).
  */
 
 export interface ConfettiOptions {
@@ -12,16 +17,38 @@ export interface ConfettiOptions {
   radius?: number;
   /** CSS colours. The first two are used most. */
   colors: string[];
-  /** Number of pieces. Default 44. */
+  /** Pieces in the main burst. Default 86. */
   count?: number;
+  /** Pieces in the second burst, 240 ms after the first. Default 25. 0 turns it off. */
+  echo?: number;
   /** Total run time in ms, capped at 1800. Default 1800. */
   duration?: number;
+  /** Fires once when the burst has finished or was stopped. Remove or hide the canvas here. */
   onDone?(): void;
 }
 
 type ShapeName = "stamp" | "leaf" | "wave" | "spark";
 const SHAPES: ShapeName[] = ["stamp", "leaf", "wave", "leaf", "stamp", "spark", "wave"];
 const SPRITE = 28; // logical px of a sprite cell
+/** The shapes are drawn about this wide inside the cell: a piece of `size` px is this many px across. */
+const SHAPE_SPAN = 21;
+/** Sprites are baked a little larger than 1:1, because the near layer draws them enlarged. */
+const SPRITE_RES = 1.3;
+
+/** Depth layers, drawn far to near. `share` is the fraction of pieces in the layer. */
+const LAYERS = [
+  { share: 0.36, size: 8, alpha: 0.6, speed: 0.7 },
+  { share: 0.4, size: 14, alpha: 0.92, speed: 0.88 },
+  { share: 0.24, size: 22, alpha: 1, speed: 1 },
+] as const;
+
+/** Second burst: this long after the first, in ms. */
+const ECHO_DELAY = 240;
+/** Launch speed range in px/s (near layer). */
+const LAUNCH: readonly [number, number] = [300, 830];
+/** Fraction of velocity left after one second: strong, so pieces burst and then float. */
+const DRAG = 0.06;
+const GRAVITY = 900;
 
 interface Piece {
   sprite: HTMLCanvasElement;
@@ -34,6 +61,10 @@ interface Piece {
   flip: number;
   vflip: number;
   size: number;
+  /** Layer opacity. */
+  alpha: number;
+  /** Layer speed: far pieces move slower (parallax). */
+  speed: number;
   delay: number;
   life: number;
 }
@@ -118,10 +149,10 @@ function drawShape(ctx: CanvasRenderingContext2D, shape: ShapeName, color: strin
 
 function makeSprite(shape: ShapeName, color: string, dpr: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
-  c.width = c.height = Math.ceil(SPRITE * dpr);
+  c.width = c.height = Math.ceil(SPRITE * dpr * SPRITE_RES);
   const ctx = c.getContext("2d");
   if (ctx) {
-    ctx.scale(dpr, dpr);
+    ctx.scale(dpr * SPRITE_RES, dpr * SPRITE_RES);
     ctx.translate(SPRITE / 2, SPRITE / 2);
     drawShape(ctx, shape, color);
   }
@@ -144,7 +175,8 @@ export function burstConfetti(canvas: HTMLCanvasElement, options: ConfettiOption
   canvas.height = Math.round(height * dpr);
 
   const duration = Math.min(1800, options.duration ?? 1800);
-  const count = options.count ?? 44;
+  const count = Math.max(0, Math.round(options.count ?? 86));
+  const echo = Math.max(0, Math.round(options.echo ?? 25));
   const radius = options.radius ?? 60;
   const colors = options.colors;
   const sprites = new Map<string, HTMLCanvasElement>();
@@ -155,31 +187,45 @@ export function burstConfetti(canvas: HTMLCanvasElement, options: ConfettiOption
     return s;
   };
 
-  const pieces: Piece[] = [];
-  for (let i = 0; i < count; i++) {
-    // Even spread around the stamp with a little jitter, thrown outward and up.
-    const angle = (i / count) * Math.PI * 2 + rnd(-0.16, 0.16);
-    const speed = rnd(230, 640);
-    const shape = SHAPES[i % SHAPES.length];
-    // Favour the first two colours (foil), sprinkle the rest.
-    const color = shape === "spark" ? colors[i % 2] : colors[Math.random() < 0.34 ? i % 2 : 2 + (i % Math.max(1, colors.length - 2))] ?? colors[0];
-    pieces.push({
-      sprite: sprite(shape, color),
-      x: options.x + Math.cos(angle) * radius * rnd(0.55, 0.95),
-      y: options.y + Math.sin(angle) * radius * rnd(0.55, 0.95),
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - rnd(210, 420),
-      rot: rnd(0, Math.PI * 2),
-      vr: rnd(-7, 7),
-      flip: rnd(0, Math.PI * 2),
-      vflip: rnd(5, 11),
-      size: shape === "spark" ? rnd(9, 15) : rnd(13, 21),
-      delay: rnd(0, 110),
-      life: rnd(0.62, 1) * (duration - 120),
-    });
-  }
+  /** One burst of `n` pieces, `delay` ms in. Appends to the layer buckets. */
+  const buckets: Piece[][] = LAYERS.map(() => []);
+  const burst = (n: number, delay: number, power: number) => {
+    const turn = rnd(0, Math.PI * 2);
+    for (let i = 0; i < n; i++) {
+      // Layers are interleaved round the circle, so no direction is all near or all far.
+      const pick = ((i * 7) % n) / n;
+      const layerIndex = pick < LAYERS[0].share ? 0 : pick < LAYERS[0].share + LAYERS[1].share ? 1 : 2;
+      const layer = LAYERS[layerIndex];
+      // Even spread around the stamp with a little jitter, thrown outward and up.
+      const angle = turn + (i / n) * Math.PI * 2 + rnd(-0.18, 0.18);
+      const speed = rnd(LAUNCH[0], LAUNCH[1]) * power;
+      const shape = SHAPES[i % SHAPES.length];
+      // Favour the first two colours (foil), sprinkle the rest.
+      const color = shape === "spark" ? colors[i % 2] : colors[Math.random() < 0.34 ? i % 2 : 2 + (i % Math.max(1, colors.length - 2))] ?? colors[0];
+      const wait = delay + rnd(0, 110);
+      buckets[layerIndex].push({
+        sprite: sprite(shape, color),
+        x: options.x + Math.cos(angle) * radius * rnd(0.55, 0.95),
+        y: options.y + Math.sin(angle) * radius * rnd(0.55, 0.95),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - rnd(260, 520) * power,
+        rot: rnd(0, Math.PI * 2),
+        vr: rnd(-7, 7),
+        flip: rnd(0, Math.PI * 2),
+        vflip: rnd(4, 10),
+        size: layer.size * (shape === "spark" ? rnd(0.7, 0.95) : rnd(0.88, 1.16)),
+        alpha: layer.alpha,
+        speed: layer.speed,
+        delay: wait,
+        life: Math.max(200, rnd(0.66, 1) * (duration - 120 - wait)),
+      });
+    }
+  };
+  burst(count, 0, 1);
+  if (echo > 0 && duration > ECHO_DELAY + 400) burst(echo, ECHO_DELAY, 0.82);
+  // Far to near, so large pieces pass in front of small ones.
+  const pieces = buckets.flat();
 
-  const GRAVITY = 1250;
   let raf = 0;
   let stopped = false;
   let start = 0;
@@ -191,6 +237,7 @@ export function burstConfetti(canvas: HTMLCanvasElement, options: ConfettiOption
     cancelAnimationFrame(raf);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    options.onDone?.();
   };
 
   const frame = (now: number) => {
@@ -199,29 +246,30 @@ export function burstConfetti(canvas: HTMLCanvasElement, options: ConfettiOption
     const elapsed = now - start;
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (elapsed >= duration) {
       stop();
-      options.onDone?.();
       return;
     }
-    const drag = Math.pow(0.16, dt);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const drag = Math.pow(DRAG, dt);
     for (const p of pieces) {
       const age = elapsed - p.delay;
       if (age < 0 || age > p.life) continue;
+      const step = dt * p.speed;
       p.vx *= drag;
       p.vy = p.vy * drag + GRAVITY * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
+      // Once the throw is spent the piece flutters: it slips sideways as it turns over.
+      p.x += (p.vx + Math.sin(p.flip) * 26) * step;
+      p.y += p.vy * step;
       p.rot += p.vr * dt;
       p.flip += p.vflip * dt;
       const t = age / p.life;
-      const alpha = t < 0.08 ? t / 0.08 : t > 0.66 ? 1 - (t - 0.66) / 0.34 : 1;
+      const alpha = (t < 0.06 ? t / 0.06 : t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1) * p.alpha;
       const cos = Math.cos(p.rot);
       const sin = Math.sin(p.rot);
       const sy = 0.35 + 0.65 * Math.abs(Math.cos(p.flip));
-      const k = (p.size / SPRITE) * dpr;
+      const k = (p.size / SHAPE_SPAN) * dpr;
       ctx.setTransform(cos * k, sin * k, -sin * k * sy, cos * k * sy, p.x * dpr, p.y * dpr);
       ctx.globalAlpha = alpha;
       ctx.drawImage(p.sprite, -SPRITE / 2, -SPRITE / 2, SPRITE, SPRITE);

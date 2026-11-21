@@ -1,5 +1,7 @@
 # Pages handoff
 
+> **Updated by the polish round.** Timings, props and layout numbers below may be out of date. `docs/agents/polish.md` lists what changed and is the current reference where the two disagree.
+
 Passport content (cover art, page designs, stamp detail sheet) and the app chrome (header, progress ring).
 Review page: `http://localhost:3100/lab/pages` (cover, all eight pages and the back cover laid flat; the header's switcher changes direction and mode; the buttons step through the demo story).
 

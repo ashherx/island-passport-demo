@@ -19,6 +19,14 @@ import type { SlotOverride } from "./types";
 
 export const u = (n: number) => `calc(var(--u) * ${n})`;
 
+/**
+ * Level of detail from the size the stamp is drawn at on screen, not from design units: on a
+ * narrow phone a slot is 84px or less, where the promoter handle and the date cannot be read.
+ * Below 120 CSS px the compact stamp (island name and artwork only, heavier lines) is used.
+ * The stamp-press overlay draws <Stamp detail="auto"> at the same size and picks the same level.
+ */
+export const stampDetail = (px: number): "compact" | "full" => (px < 120 ? "compact" : "full");
+
 /* ------------------------------------------------------------------ */
 /* Slot                                                                */
 /* ------------------------------------------------------------------ */
@@ -36,6 +44,7 @@ export interface SlotViewProps {
 
 export function SlotView({ slot, units, override, onSelect, onEmptySelect, style, className }: SlotViewProps) {
   const px = useStampPx(units);
+  const detail = stampDetail(px);
   const stamp = override?.hidden ? null : slot.stamp;
   const status = stamp ? (override?.status ?? stamp.status) : null;
   const interactive = stamp ? Boolean(onSelect) : Boolean(onEmptySelect);
@@ -44,19 +53,19 @@ export function SlotView({ slot, units, override, onSelect, onEmptySelect, style
     <>
       <span className="ipp-slot__stamp" style={{ width: u(units), height: u(units) }}>
         {override?.render ? (
-          override.render(px, units >= 112 ? "full" : "auto")
+          override.render(px, detail)
         ) : stamp ? (
           <Stamp
             stamp={stamp}
             status={override?.status}
             size={px}
-            detail={units >= 112 ? "full" : "auto"}
+            detail={detail}
             inkProgress={override?.inkProgress}
             showSeal={override?.showSeal}
             decorative={interactive}
           />
         ) : (
-          <Stamp slot={slot} size={px} decorative={interactive} />
+          <Stamp slot={slot} size={px} detail={detail} decorative={interactive} />
         )}
         {override?.after?.(px)}
       </span>
@@ -115,7 +124,7 @@ const FIELD_WIDTH = 312;
 /** Caption under a stamp, in units. */
 const CAPTION = 24;
 /** Everything on an island page that is not the stamp field: head, title block, priority, foot. */
-const PAGE_OVERHEAD = 246;
+const PAGE_OVERHEAD = 252;
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
@@ -176,6 +185,11 @@ export interface IslandPageProps {
   chrome: PageChromeProps;
   onStampSelect?(slot: StampSlot, stamp: StampData): void;
   onEmptySlotSelect?(slot: StampSlot): void;
+  /**
+   * Changes each time the reader jumps here from the province page: the locator pulses once.
+   * 0 or undefined: no pulse.
+   */
+  locate?: number;
 }
 
 /** The stamp slots. A component of its own because the page is measured inside <Page>. */
@@ -217,6 +231,7 @@ function IslandPageImpl({
   chrome,
   onStampSelect,
   onEmptySlotSelect,
+  locate,
 }: IslandPageProps) {
   const chart = getChart(island.province);
   const place = chart?.places[island.id];
@@ -249,9 +264,11 @@ function IslandPageImpl({
           <div className="ipp-island__locator">
             {chart && place ? (
               <ProvinceChartArt
+                key={locate ?? 0}
                 chart={chart}
                 markers={markers}
                 activeId={island.id}
+                pulse={Boolean(locate)}
                 title={t(cs.island.locatorAria, { island: island.name, province: island.province })}
               />
             ) : (
@@ -318,6 +335,7 @@ export const IslandPage = memo(IslandPageImpl, (a, b) => {
     a.islandCount !== b.islandCount ||
     a.onStampSelect !== b.onStampSelect ||
     a.onEmptySlotSelect !== b.onEmptySlotSelect ||
+    a.locate !== b.locate ||
     a.slots.length !== b.slots.length ||
     a.markers.length !== b.markers.length ||
     !sameChrome(a.chrome, b.chrome)

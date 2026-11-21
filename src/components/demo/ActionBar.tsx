@@ -10,6 +10,7 @@
  */
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useRef, type CSSProperties, type ReactNode } from "react";
+import { play } from "@/lib/sound";
 import { strings, t } from "@/lib/strings";
 
 const D = strings.demo;
@@ -121,6 +122,16 @@ export function ActionBar({
   const offerSheen = !busy && !reduced && idleKey !== firstIdleKey.current;
   if (busy) firstIdleKey.current = "";
 
+  /**
+   * A button of the bar was pressed: run it, with a felt tick under the thumb. Not while a moment
+   * plays (the bar does not respond then, so it does not click either). The tick comes after the
+   * handler on purpose: Replay and the stepper silence everything that is still sounding first.
+   */
+  const pressed = (run: () => void) => {
+    run();
+    if (!busy) play.tap();
+  };
+
   const stepButton = (key: JumpStep, short: string, children: ReactNode) =>
     onJump ? (
       <button
@@ -129,7 +140,7 @@ export function ActionBar({
         style={busy ? { ...STEP_BUTTON, cursor: "default" } : STEP_BUTTON}
         aria-label={t(D.jumpTo, { short })}
         disabled={busy}
-        onClick={() => onJump(key)}
+        onClick={() => pressed(() => onJump(key))}
       >
         {children}
       </button>
@@ -171,7 +182,7 @@ export function ActionBar({
           <div className="ipd-bar__tools">
             {tools}
             {onReplay && (
-              <button type="button" className="ipd-tool" onClick={onReplay} aria-label={D.replay} title={D.replay} aria-disabled={busy || undefined}>
+              <button type="button" className="ipd-tool" onClick={() => pressed(onReplay)} aria-label={D.replay} title={D.replay} aria-disabled={busy || undefined}>
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M3.2 9a5.8 5.8 0 1 0 1.9-4.3" />
                   <path d="M2.8 2.6v3.3h3.3" />
@@ -184,16 +195,16 @@ export function ActionBar({
         <button
           type="button"
           className="ipd-cta"
-          onClick={onAction}
+          onClick={() => pressed(onAction)}
           onPointerEnter={onIntent}
           onFocus={onIntent}
           aria-disabled={busy || undefined}
           data-step={step}
         >
-          <span key={idleKey} className="ipd-cta__sheen" aria-hidden="true" />
+          <span key={`gloss:${idleKey}`} className="ipd-cta__sheen" aria-hidden="true" />
           {offerSheen && (
             <motion.span
-              key={idleKey}
+              key={`offer:${idleKey}`}
               aria-hidden="true"
               style={{
                 position: "absolute",

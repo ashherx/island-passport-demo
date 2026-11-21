@@ -137,8 +137,10 @@ const headBootScript = `(function(){try{var e=document.documentElement,h=documen
  * lost. This remembers the first one on the story button or the closed passport in
  * window.__ipEarly ("cta" or "cover"); the demo replays and clears it in its first effect.
  * The listener removes itself once it has a tap, and does nothing once window.__ipHydrated is set.
+ * The empty touchstart listener is what makes iOS Safari apply :active to the button under the
+ * finger, so the pressed state (CSS only, in demo.css) shows before hydration too.
  */
-const earlyTapScript = `(function(){function off(){document.removeEventListener("pointerdown",on,true)}function on(ev){if(window.__ipHydrated){off();return}var t=ev.target;if(!t||!t.closest)return;var v=t.closest(".ipd-cta")?"cta":t.closest(".ipp-cover")||t.closest(".ipb")?"cover":"";if(v){window.__ipEarly=v;off()}}document.addEventListener("pointerdown",on,true)})();`;
+const earlyTapScript = `(function(){function off(){document.removeEventListener("pointerdown",on,true)}function on(ev){if(window.__ipHydrated){off();return}var t=ev.target;if(!t||!t.closest)return;var v=t.closest(".ipd-cta")?"cta":t.closest(".ipp-cover")||t.closest(".ipb")?"cover":"";if(v){window.__ipEarly=v;off()}}document.addEventListener("pointerdown",on,true);document.addEventListener("touchstart",function(){},{passive:true})})();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

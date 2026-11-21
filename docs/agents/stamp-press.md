@@ -1,5 +1,7 @@
 # Stamp press handoff (UX-3: earning a stamp)
 
+> **Updated by the polish round.** Timings, props and layout numbers below may be out of date. `docs/agents/polish.md` lists what changed and is the current reference where the two disagree.
+
 The moment a stamp is earned. A stamper appears above the slot with its inked face showing, swings over the page, slams down and lifts away to leave the impression.
 
 Live: `http://localhost:3100/lab/stamp-press` (a passport page, a "Collect stamp" button, repeatable, six stamps covering every frame shape).

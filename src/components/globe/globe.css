@@ -1,0 +1,421 @@
+/*
+ * Globe engine styles (src/components/globe). Prefix: ipg-.
+ *
+ * Structure
+ *   .ipg                 the box; give it a size. Carries data-status, data-altitude, data-space,
+ *                        data-flying, data-rotating, data-touring for an option's own CSS.
+ *     .ipg-stage         fills the box; the --globe-* variables live here
+ *       .ipg-halo        soft glow behind the globe
+ *       .ipg-poster      static first paint (SVG globe)
+ *       .ipg-map         MapLibre's container
+ *       .ipg-shade       sphere shading over the map (rim and highlight)
+ *       children         whatever the option passes as children
+ *       .ipg-credit      map data credits
+ *
+ * Variables an option can set (on .ipg or any ancestor)
+ *   --globe-ocean --globe-land --globe-shore   poster colours (default: the option palette)
+ *   --globe-dot --globe-dot-soon               poster island dots
+ *   --globe-halo                               glow colour around the globe; transparent to remove
+ *   --globe-shade --globe-shine                rim shading and highlight; transparent to remove
+ *   --globe-credit --globe-credit-bg           credits text and its backing
+ *
+ * Variables the engine publishes on .ipg-stage (read-only, in scope for children)
+ *   --globe-x --globe-y   centre of the globe in the box, px
+ *   --globe-r             radius of its silhouette, px
+ *   --globe-t             0 in the home view, rising to 1 as the planet outgrows the box
+ */
+
+.ipg {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  /* Lets the stage size the poster from this box with cqw / cqh, before any script runs. */
+  container-type: size;
+  isolation: isolate;
+  color-scheme: light;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ipg-stage {
+  position: absolute;
+  inset: 0;
+  --ipg-free-w: calc(100vw - var(--ipg-pad-l, 0px) - var(--ipg-pad-r, 0px));
+  --ipg-free-h: calc(100vh - var(--ipg-pad-t, 0px) - var(--ipg-pad-b, 0px));
+  /* Home view, mirrored from camera.ts: the globe's diameter is a share of the free area. */
+  --ipg-d: calc(min(var(--ipg-free-w), var(--ipg-free-h)) * var(--ipg-size, 0.86));
+  --globe-x: calc(var(--ipg-pad-l, 0px) + var(--ipg-free-w) / 2);
+  --globe-y: calc(var(--ipg-pad-t, 0px) + var(--ipg-free-h) / 2);
+  --globe-r: calc(var(--ipg-d) / 2);
+  --globe-t: 0;
+}
+
+@supports (width: 1cqw) {
+  .ipg-stage {
+    --ipg-free-w: calc(100cqw - var(--ipg-pad-l, 0px) - var(--ipg-pad-r, 0px));
+    --ipg-free-h: calc(100cqh - var(--ipg-pad-t, 0px) - var(--ipg-pad-b, 0px));
+  }
+}
+
+/* ---------------------------------------------------------------- map */
+
+.ipg-map {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  outline: none;
+}
+
+/* Until the live map is showing, taps go to the poster underneath (its dots are buttons when
+   there is no WebGL). */
+.ipg:not([data-status="ready"]) .ipg-map {
+  pointer-events: none;
+}
+
+.ipg[data-status="ready"] .ipg-map {
+  opacity: 1;
+  transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ipg[data-resumed][data-status="ready"] .ipg-map {
+  transition-duration: 0.18s;
+}
+
+/* The few rules MapLibre needs from its own stylesheet (the rest is controls we do not use). */
+.ipg .maplibregl-map {
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ipg .maplibregl-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  outline: none;
+}
+
+.ipg .maplibregl-canvas:focus-visible {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+  outline-offset: -4px;
+}
+
+.ipg .maplibregl-canvas-container.maplibregl-interactive {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ipg .maplibregl-canvas-container.maplibregl-interactive:active {
+  cursor: grabbing;
+}
+
+.ipg .maplibregl-canvas-container.maplibregl-touch-zoom-rotate,
+.ipg .maplibregl-canvas-container.maplibregl-touch-zoom-rotate .maplibregl-canvas {
+  touch-action: pan-x pan-y;
+}
+
+.ipg .maplibregl-canvas-container.maplibregl-touch-drag-pan,
+.ipg .maplibregl-canvas-container.maplibregl-touch-drag-pan .maplibregl-canvas {
+  touch-action: pinch-zoom;
+}
+
+.ipg .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan,
+.ipg .maplibregl-canvas-container.maplibregl-touch-zoom-rotate.maplibregl-touch-drag-pan .maplibregl-canvas {
+  touch-action: none;
+}
+
+.ipg .maplibregl-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+  transition: opacity 0.2s;
+}
+
+/* ------------------------------------------------------------- markers */
+
+.ipg-marker {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ipg-marker[hidden],
+.ipg-marker:empty {
+  display: none;
+}
+
+.ipg-marker:focus-visible {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+/* ------------------------------------------------------- halo and shade */
+
+.ipg-halo,
+.ipg-shade {
+  position: absolute;
+  left: calc(var(--globe-x) - var(--globe-r) * var(--ipg-k));
+  top: calc(var(--globe-y) - var(--globe-r) * var(--ipg-k));
+  width: calc(var(--globe-r) * var(--ipg-k) * 2);
+  height: calc(var(--globe-r) * var(--ipg-k) * 2);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: calc(1 - var(--globe-t));
+}
+
+/* A soft glow that reaches 28% beyond the silhouette. */
+.ipg-halo {
+  --ipg-k: 1.28;
+  background: radial-gradient(
+    closest-side,
+    var(--globe-halo, rgba(255, 255, 255, 0.9)) 76%,
+    color-mix(in srgb, var(--globe-halo, rgba(255, 255, 255, 0.9)) 38%, transparent) 86%,
+    transparent 100%
+  );
+}
+
+/* Rim shading and a highlight: what turns a flat disc into a ball. Plain alpha, no blend modes,
+   so the browser composites it for free over the WebGL canvas. */
+.ipg-shade {
+  --ipg-k: 1;
+  background:
+    radial-gradient(circle at 32% 26%, var(--globe-shine, rgba(255, 255, 255, 0.34)) 0%, transparent 42%),
+    radial-gradient(
+      closest-side,
+      transparent 58%,
+      color-mix(in srgb, var(--globe-shade, rgba(15, 43, 53, 0.16)) 45%, transparent) 84%,
+      var(--globe-shade, rgba(15, 43, 53, 0.16)) 100%
+    );
+}
+
+/* Once the planet fills the box there is nothing left to shade, and the elements would be huge. */
+.ipg[data-space="false"] .ipg-halo,
+.ipg[data-space="false"] .ipg-shade {
+  display: none;
+}
+
+/* -------------------------------------------------------------- poster */
+
+.ipg-poster {
+  position: absolute;
+  left: calc(var(--ipg-pad-l, 0px) + var(--ipg-free-w) / 2 - var(--ipg-d) / 2);
+  top: calc(var(--ipg-pad-t, 0px) + var(--ipg-free-h) / 2 - var(--ipg-d) / 2);
+  width: var(--ipg-d);
+  height: var(--ipg-d);
+  transition:
+    opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.2s,
+    visibility 0s linear 0.7s;
+}
+
+.ipg-poster[data-hidden="true"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ipg-poster[data-hidden="false"] {
+  transition: opacity 0.3s;
+}
+
+.ipg-poster-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ipg-poster-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.ipg-poster-ocean {
+  fill: var(--globe-ocean, var(--o-ocean, #bfe9ee));
+}
+
+.ipg-poster-land {
+  fill: var(--globe-land, var(--o-land, #fdfbf1));
+  stroke: var(--globe-shore, var(--o-shore, #7cc7cf));
+  stroke-width: 0.6px;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+}
+
+.ipg-poster-rim {
+  fill: none;
+  stroke: var(--globe-shore, var(--o-shore, #7cc7cf));
+  stroke-opacity: 0.35;
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.ipg-poster-dot {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  margin: -5.5px 0 0 -5.5px;
+  padding: 0;
+  border: 1.5px solid var(--globe-dot-soon, var(--o-ink-muted, #44646b));
+  border-radius: 50%;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.ipg-poster-dot[data-live="true"] {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  background: var(--globe-dot, var(--o-accent, #0b7f7a));
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--globe-dot, var(--o-accent, #0b7f7a)) 20%, transparent);
+}
+
+button.ipg-poster-dot {
+  cursor: pointer;
+  /* A comfortable target around a small dot. */
+  outline-offset: 6px;
+}
+
+button.ipg-poster-dot::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+}
+
+/* Where dots crowd together, the participating island is the one a tap reaches. */
+button.ipg-poster-dot[data-live="true"] {
+  z-index: 2;
+}
+
+button.ipg-poster-dot[data-live="true"]::before {
+  inset: -16px;
+}
+
+button.ipg-poster-dot:focus-visible,
+button.ipg-poster-dot[data-selected="true"] {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+}
+
+.ipg-poster-dot-name {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font: 600 12px/1.2 var(--o-font, var(--nf-hanken, system-ui)), system-ui, sans-serif;
+  color: var(--o-ink, #0d2b33);
+  text-shadow:
+    0 0 3px #fff,
+    0 0 3px #fff,
+    0 0 6px #fff;
+}
+
+/* ------------------------------------------------------ credits and notes */
+
+.ipg-credit {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--globe-credit-bg, color-mix(in srgb, var(--o-surface, #fff) 62%, transparent));
+  color: var(--globe-credit, var(--o-ink-muted, #44646b));
+  font: 500 10px/1.5 var(--o-font, var(--nf-hanken, system-ui)), system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.ipg-credit a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ipg-credit a:hover,
+.ipg-credit a:focus-visible {
+  text-decoration: underline;
+}
+
+.ipg-credit a:focus-visible {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* The credits sit inside the free area, so a bottom sheet or side panel never covers them. */
+.ipg-credit[data-corner^="bottom"] {
+  bottom: calc(var(--ipg-pad-b, 0px) + 6px + env(safe-area-inset-bottom, 0px) * var(--ipg-credit-safe, 1));
+}
+.ipg-credit[data-corner^="top"] {
+  top: calc(var(--ipg-pad-t, 0px) + 6px + env(safe-area-inset-top, 0px));
+}
+.ipg-credit[data-corner$="right"] {
+  right: calc(var(--ipg-pad-r, 0px) + 8px + env(safe-area-inset-right, 0px));
+}
+.ipg-credit[data-corner$="left"] {
+  left: calc(var(--ipg-pad-l, 0px) + 8px + env(safe-area-inset-left, 0px));
+}
+
+.ipg-retry {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  max-width: min(80%, 320px);
+  padding: 12px 18px;
+  border: 1px solid var(--o-line, #cfe6e6);
+  border-radius: 14px;
+  background: var(--o-surface, #fff);
+  color: var(--o-ink, #0d2b33);
+  font: 600 14px/1.35 var(--o-font, var(--nf-hanken, system-ui)), system-ui, sans-serif;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(15, 43, 53, 0.14);
+  cursor: pointer;
+}
+
+.ipg-retry:focus-visible {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+  outline-offset: 3px;
+}
+
+.ipg-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ipg-map,
+  .ipg-poster,
+  .ipg .maplibregl-marker {
+    transition-duration: 0.01s !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* Fallback labels: participating islands are named; the others show their name on hover or focus,
+   so the crowded corner of the map stays readable. */
+.ipg-poster-dot[data-live="false"] .ipg-poster-dot-name {
+  display: none;
+}
+
+.ipg-poster-dot[data-live="false"]:hover .ipg-poster-dot-name,
+.ipg-poster-dot[data-live="false"]:focus-visible .ipg-poster-dot-name {
+  display: block;
+  z-index: 3;
+}

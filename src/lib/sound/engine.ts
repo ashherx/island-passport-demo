@@ -57,6 +57,8 @@ let booted = false;
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 const lastPlayed = new Map<SoundName, number>();
+/** Every sound that has been asked for and may still be audible (or still waiting to start). */
+const live = new Set<SoundHandle>();
 
 function ctor(): AudioContextCtor | null {
   if (typeof window === "undefined") return null;
@@ -237,6 +239,8 @@ function onVisibility(): void {
 
 /** How long a sound may wait for the context to start before it is dropped (ms). */
 const LATE_MS = 250;
+/** Every sound starts this long after its play() call on the audio clock (s): room to schedule its nodes. */
+const START_LEAD = 0.012;
 
 export function playSound<K extends SoundName>(name: K, options?: SoundOptionsMap[K] & PlayOptions): SoundHandle {
   try {
@@ -254,18 +258,37 @@ export function playSound<K extends SoundName>(name: K, options?: SoundOptionsMa
 
     let bus: GainNode | null = null;
     let stopped = false;
+    const handle: SoundHandle = {
+      stop(fade = 0.08) {
+        stopped = true;
+        live.delete(handle);
+        const g = bus;
+        const c2 = ctx;
+        if (!g || !c2) return;
+        try {
+          g.gain.cancelScheduledValues(c2.currentTime);
+          g.gain.setTargetAtTime(0, c2.currentTime, Math.max(0.005, fade / 4));
+        } catch {
+          /* ignore */
+        }
+      },
+    };
     const start = () => {
-      if (stopped || !isRunning(ctx) || !master || state.muted) return;
+      if (stopped || !isRunning(ctx) || !master || state.muted) {
+        live.delete(handle);
+        return;
+      }
       try {
-        const live = ctx;
-        const g = live.createGain();
+        const c2 = ctx;
+        const g = c2.createGain();
         g.gain.value = def.level * Math.max(0, Math.min(2, options?.volume ?? 1));
         g.connect(master);
         bus = g;
-        const v: VoiceContext = { ctx: live, out: g, t: live.currentTime + 0.012 + Math.max(0, options?.delay ?? 0), rng: Math.random };
+        const v: VoiceContext = { ctx: c2, out: g, t: c2.currentTime + START_LEAD + Math.max(0, options?.delay ?? 0), rng: Math.random };
         const length = (def.voice as (v: VoiceContext, o?: unknown) => number)(v, options);
         window.setTimeout(
           () => {
+            live.delete(handle);
             try {
               g.disconnect();
             } catch {
@@ -276,34 +299,34 @@ export function playSound<K extends SoundName>(name: K, options?: SoundOptionsMa
         );
       } catch {
         /* Sound is a nicety. Never let it break the moment. */
+        live.delete(handle);
       }
     };
 
+    live.add(handle);
     if (c.state === "running") start();
     else {
       // Suspended or interrupted. Inside a gesture the resume succeeds within a few milliseconds
       // and the sound still plays; anywhere else it is dropped rather than played late.
       const p = resume();
-      if (p) void p.then(() => (performance.now() - now <= LATE_MS ? start() : undefined));
+      if (p) void p.then(() => (performance.now() - now <= LATE_MS ? start() : live.delete(handle)));
+      else live.delete(handle);
     }
 
-    return {
-      stop(fade = 0.08) {
-        stopped = true;
-        const g = bus;
-        const live = ctx;
-        if (!g || !live) return;
-        try {
-          g.gain.cancelScheduledValues(live.currentTime);
-          g.gain.setTargetAtTime(0, live.currentTime, Math.max(0.005, fade / 4));
-        } catch {
-          /* ignore */
-        }
-      },
-    };
+    return handle;
   } catch {
     return NOOP_HANDLE;
   }
+}
+
+/**
+ * Fade out everything that is playing or scheduled, whoever started it (Replay, leaving the page).
+ * `fade` in seconds, default 0.1. Sounds asked for after this call play as usual.
+ */
+export function stopAllSounds(fade = 0.1): void {
+  for (const handle of [...live]) handle.stop(fade);
+  live.clear();
+  lastPlayed.clear();
 }
 
 /* ------------------------------------------------------------------ */

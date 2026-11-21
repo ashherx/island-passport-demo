@@ -46,7 +46,7 @@ export interface Stamp {
   /** Island display name, e.g. "Balicasag". */
   island: string;
   islandId: string;
-  /** Promoter handle including the "@", e.g. "@sam.wanders". Fictional sample data. */
+  /** Promoter handle including the "@", e.g. "@mia.sample". Fictional sample data. */
   promoter: string;
   /** Charity display name. Fictional sample data. */
   charity: string;

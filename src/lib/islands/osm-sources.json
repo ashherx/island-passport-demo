@@ -1,0 +1,16 @@
+{
+  "_comment": "Input for scripts/fetch-coastlines.mjs. One entry per island. `find` searches OpenStreetMap for a place=island|islet by name near a point; once found, the script prints the element so it can be pinned as `osm` (\"relation/123\" or \"way/123\") for repeatable runs. `rank` 1 = shown from globe altitude, 2 = shown once the camera is in the region. Adding an island is a data change only (TEC-11): add an entry here and a record in src/lib/islands/data.ts, then run the script. When both are present, `osm` wins; remove it to search again.",
+  "islands": [
+    {"id": "bohol", "name": "Bohol", "status": "live", "rank": 1, "find": {"name": "^Bohol$", "near": [9.85, 124.15], "km": 40}, "osm": "relation/3625899"},
+    {"id": "panglao", "name": "Panglao", "status": "live", "rank": 2, "find": {"name": "^Panglao", "near": [9.6, 123.8], "km": 20}, "osm": "relation/3625900"},
+    {"id": "balicasag", "name": "Balicasag", "status": "live", "rank": 2, "find": {"name": "Balicasag", "near": [9.516, 123.683], "km": 8}, "osm": "way/28916900"},
+    {"id": "pamilacan", "name": "Pamilacan", "status": "live", "rank": 2, "find": {"name": "Pamilacan", "near": [9.49, 123.93], "km": 8}, "osm": "way/4243802"},
+    {"id": "banacon", "name": "Banacon", "status": "live", "rank": 2, "find": {"name": "Banacon", "near": [10.2, 124.18], "km": 10}, "osm": "way/65421556"},
+    {"id": "siargao", "name": "Siargao", "status": "coming-soon", "rank": 1, "find": {"name": "^Siargao", "near": [9.85, 126.05], "km": 40}, "osm": "relation/4480162"},
+    {"id": "palawan", "name": "El Nido, Palawan", "status": "coming-soon", "rank": 1, "find": {"name": "^Palawan", "near": [9.8, 118.7], "km": 150}, "osm": "relation/1552282"},
+    {"id": "koh-tao", "name": "Koh Tao", "status": "coming-soon", "rank": 1, "find": {"name": "^(Ko|Koh) Tao", "near": [10.095, 99.84], "km": 10}, "osm": "way/23897168"},
+    {"id": "gili-air", "name": "Gili Air", "status": "coming-soon", "rank": 1, "find": {"name": "Gili Air", "near": [-8.358, 116.082], "km": 6}, "osm": "way/230916287"},
+    {"id": "moorea", "name": "Moorea", "status": "coming-soon", "rank": 1, "find": {"name": "Mo.?orea", "near": [-17.535, -149.83], "km": 20}, "osm": "relation/10045248"},
+    {"id": "bonaire", "name": "Bonaire", "status": "coming-soon", "rank": 1, "find": {"name": "^Bonaire", "near": [12.18, -68.27], "km": 30}, "osm": "relation/4266671"}
+  ]
+}

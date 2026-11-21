@@ -1,5 +1,7 @@
 # Celebrations handoff
 
+> **Updated by the polish round.** Timings, props and layout numbers below may be out of date. `docs/agents/polish.md` lists what changed and is the current reference where the two disagree.
+
 Two moments that follow the first stamp: the status upgrade (UX-3, STM-3) and the Provincial Stamp award (UX-4, STM-4).
 Live lab: `http://localhost:3100/lab/celebrations` (both moments, with trigger, replay and reset buttons).
 

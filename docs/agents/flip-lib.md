@@ -1,5 +1,7 @@
 # flip-lib handoff: passport book on StPageFlip
 
+> **Updated by the polish round.** Timings, props and layout numbers below may be out of date. `docs/agents/polish.md` lists what changed and is the current reference where the two disagree.
+
 The interactive passport (UX-2, PAS-3) built on the `page-flip` npm package (StPageFlip 2.0.7, HTML mode).
 Live demo: `http://localhost:3100/lab/flip-lib` (8 placeholder pages, controls for every handle method).
 

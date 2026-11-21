@@ -29,6 +29,7 @@ import {
 import { Stamp, VerifiedSeal, sealAnchor, stampTilt } from "@/components/stamp";
 import { burstPath, circlePath } from "@/components/stamp/geometry";
 import { useDirectionTokens } from "@/components/theme";
+import { play as sfx, type SoundHandle } from "@/lib/sound";
 import { formatDate, strings, t } from "@/lib/strings";
 import type { Stamp as StampData } from "@/lib/types";
 import { StatusChip } from "./celebrations/StatusChip";
@@ -408,6 +409,8 @@ export const StatusUpgrade = forwardRef<StatusUpgradeHandle, StatusUpgradeProps>
   const impactedRef = useRef(impacted);
   const timers = useRef<number[]>([]);
   const anims = useRef<AnimationPlaybackControls[]>([]);
+  /** The chime of the play under way, so that a skip can take it back. */
+  const chime = useRef<SoundHandle | null>(null);
   const callbacks = useRef({ onImpact, onComplete, haptics });
   callbacks.current = { onImpact, onComplete, haptics };
 
@@ -455,6 +458,8 @@ export const StatusUpgrade = forwardRef<StatusUpgradeHandle, StatusUpgradeProps>
     boxY.set(0);
     impactedRef.current = false;
     setImpacted(false);
+    chime.current?.stop();
+    chime.current = null;
     goto("idle");
   }, [boxScale, boxY, clear, goto, ink, pendingOpacity, verifiedOpacity]);
 
@@ -474,7 +479,11 @@ export const StatusUpgrade = forwardRef<StatusUpgradeHandle, StatusUpgradeProps>
         animate(verifiedOpacity, 1, { duration: 0.26, ease: "linear" }),
         animate(pendingOpacity, 0, { duration: 0.26, ease: "linear" }),
       );
-      at(0.12, () => impact(HAPTICS.soft));
+      at(0.12, () => {
+        // No seal comes down, so no press: the chime alone, as the verified ink comes up.
+        if (!impactedRef.current) chime.current = sfx.verified({ chimeOnly: true, volume: 0.8 });
+        impact(HAPTICS.soft);
+      });
       at(T.reducedTotal, finish);
       return;
     }
@@ -495,6 +504,9 @@ export const StatusUpgrade = forwardRef<StatusUpgradeHandle, StatusUpgradeProps>
   /** The seal meets the paper. Once per play. */
   const land = useCallback(() => {
     if (phaseRef.current !== "playing" || impactedRef.current) return;
+    // The same call stack as the vibration and the dip of the page: the embossing press on the
+    // contact frame, the chime rising out of it.
+    chime.current = sfx.verified();
     impact(HAPTICS.sealPress);
     // The page takes the press: a small dip and settle.
     anims.current.push(
@@ -508,6 +520,10 @@ export const StatusUpgrade = forwardRef<StatusUpgradeHandle, StatusUpgradeProps>
 
   const skip = useCallback(() => {
     if (phaseRef.current === "done") return;
+    // Skipped before the seal: nothing has sounded and nothing will (finish() is silent). Skipped
+    // after it: the chime is let go with the rest of the moment.
+    chime.current?.stop(0.16);
+    chime.current = null;
     finish();
   }, [finish]);
 

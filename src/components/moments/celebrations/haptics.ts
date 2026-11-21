@@ -16,6 +16,10 @@ export const HAPTICS = {
 
 export function vibrate(pattern: readonly number[]): boolean {
   if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return false;
+  // Before the first tap on the page Chrome refuses, and logs an error (a moment replayed from a
+  // tap made before hydration, a lab that plays on load).
+  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  if (activation && !activation.hasBeenActive) return false;
   try {
     return navigator.vibrate([...pattern]);
   } catch {

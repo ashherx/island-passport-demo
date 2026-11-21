@@ -272,3 +272,44 @@ button.ipc-ring {
     padding: 3px;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* Appearance controls in the header: finger-sized, and visible on dark */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The swatches and the mode switch are drawn small (34px and 40px) to fit one header row.
+ * To the finger each is 44px tall: an invisible ::after carries the extra, so nothing drawn moves.
+ * The three swatches touch, so only the outer two also grow sideways.
+ */
+.ipc-header .ip-mode {
+  position: relative;
+}
+
+.ipc-header .ip-switcher__chip::after,
+.ipc-header .ip-mode::after {
+  content: "";
+  position: absolute;
+  inset: -5px 0;
+}
+
+.ipc-header .ip-switcher__chip:first-of-type::after {
+  left: -5px;
+}
+
+.ipc-header .ip-switcher__chip:last-of-type::after {
+  right: -5px;
+}
+
+.ipc-header .ip-mode::after {
+  inset: -2px;
+}
+
+/* The Classic swatch is navy on a near-black track in dark mode: a light hairline gives every
+   swatch an edge there. */
+[data-theme="dark"] .ip-switcher__swatch {
+  box-shadow:
+    inset 1.5px 0 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+}

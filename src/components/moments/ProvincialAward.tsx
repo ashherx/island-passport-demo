@@ -4,27 +4,31 @@
  * <ProvincialAward />: the full-screen celebration when the Provincial Stamp is earned (UX-4, STM-4).
  *
  *   1. The screen dims to the cover colour and slow rays turn behind the stamp.
- *   2. The stamp rises on a medallion of page paper. Light crosses its foil edge. One burst of
- *      confetti made of tiny stamps, leaves and waves (canvas, at most 1.8s).
- *   3. A line of copy and "Add to passport".
- *   4. The stamp flies to its slot on the Provincial page, is pressed in and leaves an impression.
- *      `onLanded` fires at that instant so the page can show the real stamp underneath.
+ *   2. The stamp lands on a medallion of page paper with a small overshoot. Light crosses its foil
+ *      edge. Confetti made of tiny stamps, leaves and waves (canvas, at most 1.8s).
+ *   3. A line of copy, "Add to passport" and, under it, Skip.
+ *   4. On Add the medallion lifts up and out of the book's way while the dialog clears, so the
+ *      riffle to the Provincial page plays in full view. Then the stamp flies an arc to its slot,
+ *      is pressed in (the page takes the hit) and hands over to the real stamp on the page.
+ *      `onLanded` fires at the instant of contact so the page can show the real stamp underneath.
  *
  * Skippable at any time (Skip button or Escape). With reduced motion it is a plain fade with no
  * rays, confetti or flight. See docs/agents/celebrations.md.
  */
 import { animate, motion, useMotionValue, useReducedMotion, type AnimationPlaybackControls } from "motion/react";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Stamp, stampTilt } from "@/components/stamp";
 import { scallopPath, starPath } from "@/components/stamp/geometry";
 import { DirectionScope, useDirectionId, useDirectionTokens } from "@/components/theme";
 import { hexToRgba } from "@/lib/directions";
+import { play as sfx, type SoundHandle } from "@/lib/sound";
 import { strings, t } from "@/lib/strings";
 import type { Stamp as StampData } from "@/lib/types";
 import { burstConfetti } from "./celebrations/confetti";
 import { HAPTICS, vibrate } from "./celebrations/haptics";
 import { celebrationStrings } from "./celebrations/strings";
+import { nudge } from "./stamp-press/feedback";
 import "./celebrations/celebrations.css";
 
 /* ------------------------------------------------------------------ */
@@ -44,11 +48,24 @@ export interface ProvincialAwardProps {
    * Where the stamp lands: the slot on the Provincial page (a ref, or a function returning the
    * element or its DOMRect). It is measured after `onAdd` resolves. The slot should be square and
    * the size the page draws the stamp at. Without a target the stamp simply drops away.
+   *
+   * Hand-over: after `onLanded` the flying stamp stays on the page until the real one is there,
+   * then fades. A function target says so by returning the real stamp's element (return a DOMRect
+   * until then); with a ref, the element must contain a collected `.ip-stamp`. Capped at 0.6 s.
+   * While the flying stamp is still settling, the real one is held invisible (inline opacity,
+   * restored at the hand-over and on unmount at the latest), so the two never show doubled.
    */
   target?: AwardTarget;
   /**
+   * Element that takes the hit when the stamp lands (the page or the whole book): it is nudged
+   * like in the stamping moment. Default: the nearest ancestor of the target element with
+   * `data-press-surface`, else nothing moves.
+   */
+  surface?: Element | RefObject<Element | null> | null;
+  /**
    * The traveler tapped "Add to passport". Flip the book to the Provincial page here. Return a
    * promise to make the stamp wait for the page before it flies (capped at `addTimeout`).
+   * Also called on Skip, which waits for it the same way before `onLanded`.
    */
   onAdd?(): void | Promise<unknown>;
   /** Longest wait for `onAdd`, in ms. Default 1400. */
@@ -64,19 +81,43 @@ export interface ProvincialAwardProps {
   haptics?: boolean;
   /** Confetti burst. Default true (always off with reduced motion). */
   confetti?: boolean;
+  /**
+   * Force reduced motion on or off (the host's own switch). Default: the device setting
+   * (`prefers-reduced-motion`).
+   */
+  reducedMotion?: boolean;
 }
 
-/** Timeline of the entrance in seconds. */
+/** Timeline in seconds. */
 export const PROVINCIAL_AWARD_TIMELINE = {
+  /** Entrance: the medallion arrives (scale 0.7 to 1.06 to 1, a quarter turn of the wrist). */
   rise: 0.12,
-  confetti: 0.46,
+  riseDuration: 0.52,
+  confetti: 0.42,
   confettiDuration: 1.8,
   sweep: 0.78,
   copy: 0.5,
   cta: 0.86,
-  flight: 0.64,
-  press: 0.13,
-  settle: 0.42,
+  /** Taps on Skip and Add are ignored for this long after the dialog opens (Escape is not). */
+  tapGuard: 0.6,
+  /** Add: the medallion moves up and out of the book's way while the dialog clears. */
+  lift: 0.28,
+  /** The arc from there to the slot. */
+  flight: 0.52,
+  /** Pressed into the page: contact is at the end of this. */
+  press: 0.11,
+  /** 0.94 to 1.03 to 1 after contact. */
+  settle: 0.26,
+  /** The glint crosses the impression this long after contact. */
+  glint: 0.15,
+  /**
+   * Hand-over to the page's own stamp, which starts when the settle has played and the real stamp
+   * is on the page, and no later than `handOverMax` after contact: the real stamp comes up under
+   * the flying one (`handOverIn`) while the flying one thins away (`handOverFade`).
+   */
+  handOverMax: 0.6,
+  handOverIn: 0.1,
+  handOverFade: 0.2,
 } as const;
 
 const T = PROVINCIAL_AWARD_TIMELINE;
@@ -84,20 +125,59 @@ type Bezier = [number, number, number, number];
 const SOFT_EASE: Bezier = [0.22, 1, 0.36, 1];
 const PRESS_EASE: Bezier = [0.6, 0, 0.9, 0.3];
 
+/**
+ * Where the medallion waits while the book riffles to the Provincial page: up, small, and a little
+ * to the left (`x` is a fraction of the viewport width, capped at `maxX` px), so that the flight to
+ * a slot straight below it is still an arc and not a drop.
+ */
+const LIFT = { y: 150, x: -0.16, maxX: 64, scale: 0.62, rotate: -6 } as const;
+/** The glint that crosses the impression after the landing, in seconds. */
+const GLINT_DURATION = 0.34;
+/** Radius of the medallion (stamp plus foil rim) in multiples of the stamp size. */
+const MEDAL_RADIUS = 0.595;
+/** The page takes this hit when the stamp lands (see nudge() in stamp-press/feedback). */
+const LAND_NUDGE = 1.6;
+/** A collected stamp, as opposed to the dashed placeholder of an empty slot. */
+const REAL_STAMP = '.ip-stamp:not([data-status="empty"])';
+const LANDSCAPE_PHONE = "(max-height: 480px) and (orientation: landscape)";
+
 type Phase = "enter" | "leaving" | "flying" | "landed" | "closing";
 
-function resolveTarget(target: AwardTarget | undefined): DOMRect | null {
+function readTarget(target: AwardTarget | undefined): Element | DOMRect | null {
   if (!target) return null;
   const value = typeof target === "function" ? target() : target.current;
-  if (!value) return null;
-  const rect = value instanceof Element ? value.getBoundingClientRect() : value;
-  return rect.width > 4 && rect.height > 4 ? rect : null;
+  return value ?? null;
 }
+
+function rectOf(value: Element | DOMRect | null): DOMRect | null {
+  if (!value) return null;
+  if (value instanceof Element && !value.isConnected) return null;
+  const rect = value instanceof Element ? value.getBoundingClientRect() : value;
+  return rect.width > 4 && rect.height > 4 && Number.isFinite(rect.left + rect.top) ? rect : null;
+}
+
+/** The real stamp on the page, once the host shows it (see `target` in the props). */
+function realStamp(target: AwardTarget | undefined, value: Element | DOMRect | null): HTMLElement | null {
+  if (!(value instanceof HTMLElement) || !value.isConnected) return null;
+  if (typeof target === "function") return value;
+  return value.matches(REAL_STAMP) ? value : value.querySelector<HTMLElement>(REAL_STAMP);
+}
+
+function surfaceOf(surface: ProvincialAwardProps["surface"], target: Element | DOMRect | null): Element | null {
+  if (surface instanceof Element) return surface;
+  if (surface && "current" in surface) return surface.current;
+  if (surface === undefined && target instanceof Element) return target.closest("[data-press-surface]");
+  return null;
+}
+
+const centreOf = (r: DOMRect) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
 
 function heroSize(): number {
   if (typeof window === "undefined") return 240;
   const w = window.innerWidth;
   const h = window.innerHeight;
+  // A phone on its side: the seal sits beside the copy and may use most of the height.
+  if (window.matchMedia?.(LANDSCAPE_PHONE).matches) return Math.round(Math.max(120, Math.min(220, h * 0.62, w * 0.3)));
   return Math.round(Math.max(150, Math.min(264, w * 0.62, h * 0.3)));
 }
 
@@ -105,27 +185,30 @@ function heroSize(): number {
 /* Pieces                                                              */
 /* ------------------------------------------------------------------ */
 
-/** White copy of the stamp's foil (edge, beads, stars), revealed by the travelling light band. */
-function FoilHighlight({ delay }: { delay: number }) {
+/** The stamp's foil (edge, beads, stars) as a mask image: the light band shows only through it. */
+function foilMask(): string {
   const C = 100;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><g fill="none" stroke="#fff">` +
+    `<path d="${scallopPath(36, 92.4, 0.74)}" stroke-width="3.1" stroke-linejoin="round"/>` +
+    `<circle cx="${C}" cy="${C}" r="85.2" stroke-width="2.5" stroke-dasharray="0.1 4.46" stroke-linecap="round"/>` +
+    `<g fill="#fff" stroke="none">` +
+    `<path d="${starPath(C, 8.5, 7.6)}"/><path d="${starPath(C - 17.5, 11.2, 4.6)}"/>` +
+    `<path d="${starPath(C + 17.5, 11.2, 4.6)}"/><path d="${starPath(C, 191.6, 5.2)}"/>` +
+    `</g></g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+
+/**
+ * Light catching the stamp's foil. The mask is static and the band inside it only translates, so
+ * the pass is composited: nothing is repainted (the old version animated mask-position).
+ */
+function FoilHighlight({ delay }: { delay: number }) {
+  const mask = useMemo(foilMask, []);
   return (
-    <svg
-      className="ipc-award__foilhi ipc-sweep"
-      data-run="loop"
-      viewBox="0 0 200 200"
-      aria-hidden="true"
-      focusable="false"
-      style={{ "--sweep-delay": `${delay}s` } as CSSProperties}
-    >
-      <g fill="none" stroke="#fff" opacity="0.95">
-        <path d={scallopPath(36, 92.4, 0.74)} strokeWidth={3.1} strokeLinejoin="round" />
-        <circle cx={C} cy={C} r={85.2} strokeWidth={2.5} strokeDasharray="0.1 4.46" strokeLinecap="round" />
-        <path d={starPath(C, 8.5, 7.6)} fill="#fff" stroke="none" />
-        <path d={starPath(C - 17.5, 11.2, 4.6)} fill="#fff" stroke="none" />
-        <path d={starPath(C + 17.5, 11.2, 4.6)} fill="#fff" stroke="none" />
-        <path d={starPath(C, 191.6, 5.2)} fill="#fff" stroke="none" />
-      </g>
-    </svg>
+    <div className="ipc-award__foilhi" style={{ WebkitMaskImage: mask, maskImage: mask }} aria-hidden="true">
+      <i className="ipc-band" style={{ "--band-delay": `${delay}s` } as CSSProperties} />
+    </div>
   );
 }
 
@@ -151,15 +234,18 @@ function AwardOverlay({
   stamp,
   verifiedCount,
   target,
+  surface,
   onAdd,
   addTimeout = 1400,
   onLanded,
   onComplete,
   haptics = true,
   confetti = true,
+  reducedMotion,
 }: ProvincialAwardProps) {
   const tok = useDirectionTokens();
-  const reduced = useReducedMotion() ?? false;
+  const deviceReduced = useReducedMotion() ?? false;
+  const reduced = reducedMotion ?? deviceReduced;
   const uid = useId();
   const titleId = `${uid}-title`;
   const bodyId = `${uid}-body`;
@@ -168,6 +254,8 @@ function AwardOverlay({
   const [size, setSize] = useState(heroSize);
   const [impactAt, setImpactAt] = useState<{ x: number; y: number; d: number } | null>(null);
   const [announce, setAnnounce] = useState("");
+  // The confetti canvas is a full-screen layer: it is in the document only while a burst can play.
+  const [confettiOn, setConfettiOn] = useState(confetti && !reduced);
 
   const rootRef = useRef<HTMLDivElement>(null);
   const slotRef = useRef<HTMLDivElement>(null);
@@ -189,11 +277,19 @@ function AwardOverlay({
   const landedRef = useRef(false);
   const doneRef = useRef(false);
   const aliveRef = useRef(true);
+  const openedAt = useRef(0);
   const timers = useRef<number[]>([]);
   const anims = useRef<AnimationPlaybackControls[]>([]);
+  const followRaf = useRef(0);
   const stopConfetti = useRef<(() => void) | null>(null);
-  const callbacks = useRef({ onAdd, onLanded, onComplete, target, haptics });
-  callbacks.current = { onAdd, onLanded, onComplete, target, haptics };
+  const adding = useRef<Promise<void> | null>(null);
+  /** The page's real stamp while it is held invisible under the settling flyer. */
+  const held = useRef<{ el: HTMLElement; opacity: string; transition: string } | null>(null);
+  /** The swell that plays while the award is presented, and the whoosh and hit of the flight. */
+  const revealSound = useRef<SoundHandle | null>(null);
+  const landSound = useRef<SoundHandle | null>(null);
+  const callbacks = useRef({ onAdd, onLanded, onComplete, target, surface, haptics });
+  callbacks.current = { onAdd, onLanded, onComplete, target, surface, haptics };
 
   const goto = useCallback((next: Phase) => {
     phaseRef.current = next;
@@ -204,6 +300,42 @@ function AwardOverlay({
   }, []);
   const buzz = useCallback((pattern: readonly number[]) => {
     if (callbacks.current.haptics) vibrate(pattern);
+  }, []);
+
+  /** Give the page's real stamp back its own opacity (and, a frame later, its transition). */
+  const release = useCallback((fade = 0) => {
+    const h = held.current;
+    if (!h) return;
+    held.current = null;
+    const { el, opacity, transition } = h;
+    if (fade > 0) {
+      void el.offsetWidth; // start the fade from the held state
+      el.style.transition = `opacity ${fade}s linear`;
+      el.style.opacity = opacity;
+      window.setTimeout(() => {
+        el.style.transition = transition;
+      }, fade * 1000 + 60);
+    } else {
+      el.style.transition = "none";
+      el.style.opacity = opacity;
+      requestAnimationFrame(() => {
+        el.style.transition = transition;
+      });
+    }
+  }, []);
+
+  /** Fade out whatever this award is playing (Skip, Escape, a flight with nowhere to land, unmount). */
+  const quiet = useCallback((fade?: number) => {
+    revealSound.current?.stop(fade);
+    revealSound.current = null;
+    landSound.current?.stop(fade);
+    landSound.current = null;
+  }, []);
+
+  const endConfetti = useCallback(() => {
+    stopConfetti.current?.();
+    stopConfetti.current = null;
+    setConfettiOn(false);
   }, []);
 
   const landed = useCallback(() => {
@@ -220,129 +352,280 @@ function AwardOverlay({
     callbacks.current.onComplete?.();
   }, [landed]);
 
-  /** Fade everything out and finish. Used by skip, reduced motion and the no-target fallback. */
-  const close = useCallback(
-    (duration = 0.22) => {
-      if (phaseRef.current === "closing") return;
+  /** Fade the whole overlay out. */
+  const fadeOut = useCallback(
+    (duration: number) => {
       goto("closing");
-      stopConfetti.current?.();
-      landed();
+      endConfetti();
+      release();
       anims.current.push(
         animate(backdropOpacity, 0, { duration, ease: "linear" }),
         animate(uiOpacity, 0, { duration: duration * 0.7, ease: "linear" }),
         animate(flyerOpacity, 0, { duration, ease: "linear" }),
       );
+    },
+    [backdropOpacity, endConfetti, flyerOpacity, goto, release, uiOpacity],
+  );
+
+  /** Fade everything out and finish. Used by a late skip and the no-target fallback. */
+  const close = useCallback(
+    (duration = 0.22) => {
+      if (phaseRef.current === "closing") return;
+      fadeOut(duration);
+      landed();
       later(duration + 0.02, complete);
     },
-    [backdropOpacity, complete, flyerOpacity, goto, landed, later, uiOpacity],
+    [complete, fadeOut, landed, later],
+  );
+
+  /**
+   * Ask the host to turn to the Provincial page (once). Resolves when the page is there, or after
+   * `addTimeout`, whichever is first.
+   */
+  const runAdd = useCallback((): Promise<void> => {
+    if (adding.current) return adding.current;
+    let result: void | Promise<unknown>;
+    try {
+      result = callbacks.current.onAdd?.();
+    } catch {
+      result = undefined; // the integrator's handler failed: carry on
+    }
+    adding.current = new Promise<void>((resolve) => {
+      if (result && typeof (result as Promise<unknown>).then === "function") {
+        const settle = () => resolve();
+        (result as Promise<unknown>).then(settle, settle);
+        later(Math.max(0.2, addTimeout / 1000), settle);
+      } else {
+        resolve();
+      }
+    });
+    return adding.current;
+  }, [addTimeout, later]);
+
+  /**
+   * Leave without the flight (Skip, or Add with reduced motion). The award itself is automatic
+   * (STM-4), so the book still turns to the Provincial page; the overlay clears at once so that
+   * is in view, and the stamp is shown on the page when the page is there.
+   */
+  const leaveQuietly = useCallback(
+    (duration: number) => {
+      const arrived = runAdd();
+      fadeOut(duration);
+      let faded = false;
+      let there = false;
+      const finish = () => {
+        if (!faded || !there || !aliveRef.current) return;
+        landed();
+        complete();
+      };
+      later(duration + 0.02, () => {
+        faded = true;
+        finish();
+      });
+      void arrived.then(() => {
+        there = true;
+        finish();
+      });
+    },
+    [complete, fadeOut, landed, later, runAdd],
   );
 
   const skip = useCallback(() => {
-    if (phaseRef.current === "closing") return;
-    if (phaseRef.current === "enter") {
-      // The award itself is automatic (STM-4). Skipping only skips the show.
-      try {
-        void callbacks.current.onAdd?.();
-      } catch {
-        /* the integrator's handler failed: still close */
-      }
-    }
+    const now = phaseRef.current;
+    if (now === "closing") return;
     anims.current.forEach((a) => a.stop());
-    close(0.18);
-  }, [close]);
+    cancelAnimationFrame(followRaf.current);
+    // Skipped: the swell, and a flight that will now never land, go with the picture.
+    quiet(0.18);
+    if (now === "enter" || now === "leaving") leaveQuietly(0.18);
+    else close(0.18);
+  }, [close, leaveQuietly, quiet]);
 
-  /** The stamp travels to its slot, is pressed in, then hands over to the real stamp on the page. */
+  /** Contact: the stamp is on the page. The page takes the hit and the real stamp takes over. */
+  const touchDown = useCallback(
+    (to: DOMRect, s: number) => {
+      if (!aliveRef.current || phaseRef.current !== "flying") return;
+      goto("landed");
+      buzz(HAPTICS.awardLand);
+      nudge(surfaceOf(callbacks.current.surface, readTarget(callbacks.current.target)), LAND_NUDGE);
+      let at = centreOf(to);
+      setImpactAt({ x: at.x, y: at.y, d: Math.min(to.width, to.height) });
+      landed();
+      anims.current.push(animate(scale, [s * 0.94, s * 1.03, s], { duration: T.settle, times: [0, 0.5, 1], ease: ["easeOut", "easeInOut"] }));
+
+      /*
+       * Hand over to the real stamp. The host shows it when `onLanded` commits, which may be a few
+       * frames late (a transition). Three rules:
+       *   - the flying stamp stays, at full strength, until the real one is on the page (or
+       *     `handOverMax`), so the two are never both gone;
+       *   - while the flying stamp is still settling (it changes size), the real one is held
+       *     invisible, so the two never show doubled;
+       *   - until it has faded, the flying stamp follows the slot every frame (the nudge moves the
+       *     page, and showing the real stamp may reflow it).
+       */
+      const t0 = performance.now();
+      let fadeAt = 0;
+      let frames = 0;
+      const follow = () => {
+        followRaf.current = 0;
+        if (!aliveRef.current || phaseRef.current !== "landed") return;
+        const now = performance.now();
+        const elapsed = (now - t0) / 1000;
+        const value = readTarget(callbacks.current.target);
+        const rect = rectOf(value);
+        frames += 1;
+        if (rect) {
+          const c = centreOf(rect);
+          const mx = c.x - at.x;
+          const my = c.y - at.y;
+          if (Math.abs(mx) >= 0.2 || Math.abs(my) >= 0.2) {
+            x.set(x.get() + mx);
+            y.set(y.get() + my);
+            at = c;
+            // A reflow right after the commit moves the rings too. The nudge alone does not.
+            if (frames <= 3 && Math.hypot(mx, my) >= 3) setImpactAt({ x: c.x, y: c.y, d: Math.min(rect.width, rect.height) });
+          }
+        }
+        if (!fadeAt) {
+          const real = realStamp(callbacks.current.target, value);
+          if (real && real !== held.current?.el) {
+            release();
+            held.current = { el: real, opacity: real.style.opacity, transition: real.style.transition };
+            real.style.transition = "none";
+            real.style.opacity = "0";
+          }
+          if ((held.current && elapsed >= T.settle) || elapsed >= T.handOverMax) {
+            fadeAt = now;
+            release(T.handOverIn);
+            anims.current.push(animate(flyerOpacity, 0, { duration: T.handOverFade, ease: "linear" }));
+          }
+        } else if ((now - fadeAt) / 1000 >= T.handOverFade + 0.03 && elapsed >= Math.max(T.settle + 0.06, T.glint + GLINT_DURATION + 0.02)) {
+          complete();
+          return;
+        }
+        followRaf.current = requestAnimationFrame(follow);
+      };
+      followRaf.current = requestAnimationFrame(follow);
+      // Frames stop in a hidden tab: never leave the host waiting.
+      later(T.handOverMax + T.handOverFade + 0.4, complete);
+    },
+    [buzz, complete, flyerOpacity, goto, landed, later, release, scale, x, y],
+  );
+
+  /** The stamp flies an arc from where it waits to its slot and is pressed in. */
   const fly = useCallback(() => {
     if (!aliveRef.current || phaseRef.current !== "leaving") return;
     const from = slotRef.current?.getBoundingClientRect();
-    const to = resolveTarget(callbacks.current.target);
+    const to = rectOf(readTarget(callbacks.current.target));
     if (!from || !to) {
       // No slot to land in: let the stamp sink away and finish.
+      quiet(0.3);
       anims.current.push(
-        animate(y, 46, { duration: 0.32, ease: "easeIn" }),
-        animate(scale, 0.72, { duration: 0.32, ease: "easeIn" }),
+        animate(y, y.get() + 46, { duration: 0.32, ease: "easeIn" }),
+        animate(scale, scale.get() * 0.72, { duration: 0.32, ease: "easeIn" }),
       );
       close(0.3);
       return;
     }
     goto("flying");
-    const dx = to.left + to.width / 2 - (from.left + from.width / 2);
-    const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+    // Whoosh through the flight, the hit on the audio clock exactly where touchDown() is due.
+    landSound.current = sfx.provincialLand({ flight: T.flight, press: T.press });
+    const a = centreOf(from);
+    const b = centreOf(to);
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
     const s = Math.min(to.width, to.height) / from.width;
     const tilt = stampTilt(stamp.id, stamp.kind);
-    const lift = Math.min(-18, -Math.abs(dy) * 0.16 - 14);
-    const hover = s * 1.16;
+    const y0 = y.get();
+    // It rises a little more before it drops, but never off the top of the screen.
+    const top = a.y + y0 - from.width * MEDAL_RADIUS * scale.get();
+    const rise = Math.max(0, Math.min(36, top - 4));
 
     anims.current.push(
-      // A shallow arc: it lifts off first, then drops onto the page.
-      animate(x, dx, { duration: T.flight, ease: [0.5, 0, 0.2, 1] }),
-      animate(y, [y.get(), lift, dy], { duration: T.flight, times: [0, 0.3, 1], ease: ["easeOut", [0.55, 0, 0.35, 1]] }),
-      animate(scale, [scale.get(), Math.max(1.08, hover), hover], { duration: T.flight, times: [0, 0.3, 1], ease: ["easeOut", [0.55, 0, 0.35, 1]] }),
-      animate(rotate, [0, -7, tilt], { duration: T.flight, times: [0, 0.35, 1], ease: "easeInOut" }),
+      // Across first, then down: it is over the slot before it comes down hard.
+      animate(x, dx, { duration: T.flight, ease: [0.5, 0, 0.15, 1] }),
+      animate(y, [y0, y0 - rise, dy], { duration: T.flight, times: [0, 0.3, 1], ease: ["easeOut", PRESS_EASE] }),
+      animate(rotate, [rotate.get(), 4, tilt], { duration: T.flight, times: [0, 0.46, 1], ease: "easeInOut" }),
+      animate(scale, s * 1.16, { duration: T.flight, ease: [0.45, 0, 0.55, 1] }),
       // The medallion is page paper: it dissolves so only ink arrives on the real page.
-      animate(medalOpacity, 0, { delay: T.flight * 0.34, duration: T.flight * 0.5, ease: "easeIn" }),
+      animate(medalOpacity, 0, { delay: T.flight * 0.4, duration: T.flight * 0.46, ease: "easeIn" }),
     );
     later(T.flight, () => {
-      anims.current.push(animate(scale, s, { duration: T.press, ease: PRESS_EASE }));
+      anims.current.push(animate(scale, s * 0.94, { duration: T.press, ease: "easeIn" }));
     });
-    later(T.flight + T.press, () => {
-      goto("landed");
-      buzz(HAPTICS.awardLand);
-      setImpactAt({ x: to.left + to.width / 2, y: to.top + to.height / 2, d: Math.min(to.width, to.height) });
-      landed();
-      // Showing the real stamp may reflow the page. Follow the slot so the hand-over stays aligned.
-      requestAnimationFrame(() => {
-        const now = resolveTarget(callbacks.current.target);
-        if (!now || !aliveRef.current) return;
-        const mx = now.left + now.width / 2 - (to.left + to.width / 2);
-        const my = now.top + now.height / 2 - (to.top + to.height / 2);
-        if (Math.abs(mx) < 0.5 && Math.abs(my) < 0.5) return;
-        x.set(x.get() + mx);
-        y.set(y.get() + my);
-        setImpactAt({ x: now.left + now.width / 2, y: now.top + now.height / 2, d: Math.min(now.width, now.height) });
-      });
-      // Hand over to the real stamp the page now shows. The flyer holds still while it dissolves,
-      // so the two impressions never double up.
-      anims.current.push(animate(flyerOpacity, 0, { delay: 0.05, duration: 0.2, ease: "linear" }));
-    });
-    later(T.flight + T.press + T.settle + 0.06, complete);
-  }, [buzz, close, complete, flyerOpacity, goto, landed, later, medalOpacity, rotate, scale, stamp.id, stamp.kind, x, y]);
+    later(T.flight + T.press, () => touchDown(to, s));
+  }, [close, goto, later, medalOpacity, quiet, rotate, scale, stamp.id, stamp.kind, touchDown, x, y]);
 
   const add = useCallback(() => {
     if (phaseRef.current !== "enter") return;
-    stopConfetti.current?.();
-    let result: void | Promise<unknown>;
-    try {
-      result = callbacks.current.onAdd?.();
-    } catch {
-      result = undefined;
-    }
     if (reduced) {
-      close(0.2);
+      revealSound.current?.stop(0.2);
+      revealSound.current = null;
+      leaveQuietly(0.2);
       return;
     }
+    endConfetti();
+    const arrived = runAdd();
     goto("leaving");
+    // The presentation is over: its swell lets go while the medallion lifts, and the riffle and
+    // the flight are heard on their own.
+    revealSound.current?.stop(T.lift);
+    revealSound.current = null;
+
+    // Up and out of the book's way, staying a little below the top safe area.
+    const root = rootRef.current;
+    const slot = slotRef.current?.getBoundingClientRect();
+    const safeTop = root ? parseFloat(getComputedStyle(root).paddingTop) || 0 : 0;
+    let liftY = -LIFT.y;
+    let liftX = Math.max(-LIFT.maxX, window.innerWidth * LIFT.x);
+    if (slot) {
+      const radius = slot.width * MEDAL_RADIUS * LIFT.scale;
+      const c = centreOf(slot);
+      liftY = Math.min(0, Math.max(-LIFT.y, safeTop + 12 + radius - c.y));
+      // Never off the left edge either.
+      liftX = Math.min(0, Math.max(liftX, 8 + radius - c.x));
+    }
     anims.current.push(
       animate(uiOpacity, 0, { duration: 0.2, ease: "linear" }),
-      animate(backdropOpacity, 0, { delay: 0.06, duration: 0.5, ease: "easeInOut" }),
-      // Anticipation: the stamp lifts off the screen a touch before it travels.
-      animate(scale, 1.07, { duration: 0.26, ease: SOFT_EASE }),
-      animate(y, -8, { duration: 0.26, ease: SOFT_EASE }),
+      animate(backdropOpacity, 0, { duration: 0.5, ease: "easeInOut" }),
+      animate(x, liftX, { duration: T.lift, ease: SOFT_EASE }),
+      animate(y, liftY, { duration: T.lift, ease: SOFT_EASE }),
+      animate(scale, LIFT.scale, { duration: T.lift, ease: SOFT_EASE }),
+      animate(rotate, LIFT.rotate, { duration: T.lift, ease: SOFT_EASE }),
     );
+
+    // Fly as soon as both the lift has played and the page is there.
+    let lifted = false;
+    let there = false;
     let started = false;
     const start = () => {
-      if (started) return;
+      if (started || !lifted || !there) return;
       started = true;
-      fly();
+      // Two frames for the page to settle where the riffle left it, then measure and go.
+      later(0.032, fly);
     };
-    if (result && typeof (result as Promise<unknown>).then === "function") {
-      const wait = Math.max(0.2, addTimeout / 1000);
-      (result as Promise<unknown>).then(() => later(0.05, start), () => later(0.05, start));
-      later(wait, start);
-    } else {
-      later(0.2, start);
-    }
-  }, [addTimeout, backdropOpacity, close, fly, goto, later, reduced, scale, uiOpacity, y]);
+    later(T.lift, () => {
+      lifted = true;
+      start();
+    });
+    void arrived.then(() => {
+      there = true;
+      start();
+    });
+  }, [backdropOpacity, endConfetti, fly, goto, later, leaveQuietly, reduced, rotate, runAdd, scale, uiOpacity, x, y]);
+
+  /* A tap that was aimed at the page just before the dialog opened must not land on a button. */
+  const guarded = useCallback(
+    (fn: () => void) => {
+      // With reduced motion the buttons are fully visible after 0.2 s, so the guard ends sooner.
+      const guard = reduced ? Math.min(T.tapGuard, 0.3) : T.tapGuard;
+      if (performance.now() - openedAt.current < guard * 1000) return;
+      fn();
+    },
+    [reduced],
+  );
+  const onAddClick = useCallback(() => guarded(add), [add, guarded]);
+  const onSkipClick = useCallback(() => guarded(skip), [guarded, skip]);
 
   /* --- Entrance -------------------------------------------------------- */
 
@@ -357,6 +640,7 @@ function AwardOverlay({
 
   useEffect(() => {
     aliveRef.current = true;
+    openedAt.current = performance.now();
     const previous = document.activeElement as HTMLElement | null;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -364,12 +648,19 @@ function AwardOverlay({
 
     anims.current.push(animate(backdropOpacity, 1, { duration: reduced ? 0.2 : 0.38, ease: "easeOut" }));
     if (!reduced) {
+      // The swell rises with the backdrop and the medallion and blooms with the confetti burst.
+      // Nothing was tapped to open this: it plays through the audio the earlier taps unlocked.
+      // (Kept across the effect's double run in React's dev mode: see the clean-up below.)
+      revealSound.current ??= sfx.provincialReveal({ bloomAt: T.confetti });
       later(T.rise + 0.3, () => buzz(HAPTICS.awardReveal));
       if (confetti) {
         later(T.confetti, () => {
           const canvas = canvasRef.current;
           const slot = slotRef.current?.getBoundingClientRect();
-          if (!canvas || !slot || phaseRef.current !== "enter") return;
+          if (!canvas || !slot || phaseRef.current !== "enter") {
+            setConfettiOn(false);
+            return;
+          }
           const dark = tok.chrome.dark;
           stopConfetti.current = burstConfetti(canvas, {
             x: slot.left + slot.width / 2,
@@ -377,10 +668,16 @@ function AwardOverlay({
             radius: slot.width * 0.5,
             duration: T.confettiDuration * 1000,
             colors: [tok.foil.base, tok.foil.hi, tok.paper.base, dark.status.verified, dark.status.discovery, dark.accent],
+            // Finished (or stopped): take the canvas out of the document.
+            onDone: () => {
+              if (aliveRef.current) setConfettiOn(false);
+            },
           });
         });
       }
     } else {
+      // A plain fade: two notes of the chime, no swell.
+      revealSound.current ??= sfx.verified({ chimeOnly: true, notes: 2 });
       buzz(HAPTICS.soft);
     }
 
@@ -393,7 +690,7 @@ function AwardOverlay({
         return;
       }
       if (e.key === "Tab") {
-        const items = [skipRef.current, ctaRef.current].filter((el): el is HTMLButtonElement => !!el && !el.disabled);
+        const items = [ctaRef.current, skipRef.current].filter((el): el is HTMLButtonElement => !!el && !el.disabled);
         if (items.length === 0) return;
         const index = items.indexOf(document.activeElement as HTMLButtonElement);
         const next = items[(index + (e.shiftKey ? -1 : 1) + items.length) % items.length] ?? items[0];
@@ -417,7 +714,19 @@ function AwardOverlay({
       timerList.current = [];
       animList.current.forEach((a) => a.stop());
       animList.current = [];
+      cancelAnimationFrame(followRaf.current);
       stopConfetti.current?.();
+      stopConfetti.current = null;
+      // The swell never outlives the dialog. Decided a task later, because React's dev mode runs
+      // this clean-up once right after mounting and the swell must survive that. The landing is
+      // left to ring: when the overlay goes after a flight, the stamp is on the page and its
+      // sparkle tail belongs there.
+      window.setTimeout(() => {
+        if (aliveRef.current) return;
+        revealSound.current?.stop(0.15);
+        revealSound.current = null;
+      }, 0);
+      release();
       document.body.style.overflow = prevOverflow;
       if (previous && document.contains(previous)) previous.focus({ preventScroll: true });
     };
@@ -431,7 +740,9 @@ function AwardOverlay({
   const deep = kraft ? tok.cover.ink : tok.cover.deep;
   const edge = kraft ? "#14100b" : tok.cover.edge;
   const vars = {
-    "--award-backdrop": `radial-gradient(120% 80% at 50% 36%, ${hexToRgba(deep, 0.975)} 0%, ${hexToRgba(edge, 0.985)} 58%, ${hexToRgba(edge, 0.992)} 100%)`,
+    // Opaque: nothing of the page may ghost through the celebration. The entrance and exit fades
+    // run on the backdrop's own opacity, so the book still shows through while the stamp is added.
+    "--award-backdrop": `radial-gradient(120% 80% at 50% 36%, ${hexToRgba(deep, 1)} 0%, ${hexToRgba(edge, 1)} 58%, ${hexToRgba(edge, 1)} 100%)`,
     "--award-ray": hexToRgba(tok.foil.base, 0.42),
     "--award-glow": hexToRgba(tok.foil.base, 0.34),
     "--award-fg": tok.paper.base,
@@ -440,6 +751,8 @@ function AwardOverlay({
   } as CSSProperties;
 
   const interactive = phase === "enter";
+  // The light bands and the rays belong to the presentation: gone once the stamp is on its way.
+  const shining = !reduced && phase === "enter";
   const copy = (delay: number) =>
     reduced
       ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { duration: 0.2 } }
@@ -448,6 +761,7 @@ function AwardOverlay({
           animate: { opacity: 1, y: 0 },
           transition: { delay, duration: 0.6, ease: SOFT_EASE },
         };
+  const tilt = stampTilt(stamp.id, stamp.kind);
 
   return (
     <div
@@ -459,22 +773,23 @@ function AwardOverlay({
       aria-labelledby={titleId}
       aria-describedby={bodyId}
       data-phase={phase}
+      data-reduced={reduced ? "true" : undefined}
       tabIndex={-1}
     >
       <motion.div className="ipc-award__backdrop" style={{ opacity: backdropOpacity }} />
 
-      <canvas ref={canvasRef} className="ipc-award__canvas" aria-hidden="true" />
+      {confettiOn && <canvas ref={canvasRef} className="ipc-award__canvas" aria-hidden="true" />}
 
       <div className="ipc-award__stage">
-        <motion.div style={{ opacity: uiOpacity }}>
+        <motion.div className="ipc-award__ui" style={{ opacity: uiOpacity }}>
           <motion.p className="ipc-award__eyebrow" {...copy(T.copy - 0.16)}>
             {t(strings.stamp.provincialOf, { province: stamp.island })}
           </motion.p>
         </motion.div>
 
         <div ref={slotRef} className="ipc-award__slot" style={{ width: size, height: size, marginBlock: Math.round(size * 0.095) }}>
-          {!reduced && (
-            <motion.div className="ipc-award__rays" style={{ opacity: uiOpacity }} aria-hidden="true">
+          {!reduced && (phase === "enter" || phase === "leaving" || phase === "closing") && (
+            <motion.div className="ipc-award__rays ipc-award__ui" style={{ opacity: uiOpacity }} aria-hidden="true">
               <motion.div
                 style={{ position: "absolute", inset: 0 }}
                 initial={{ opacity: 0, scale: 0.7 }}
@@ -488,38 +803,41 @@ function AwardOverlay({
           <motion.div className="ipc-award__flyer" style={{ x, y, scale, rotate, opacity: flyerOpacity }}>
             <motion.div
               className="ipc-award__rise"
-              initial={reduced ? { opacity: 0 } : { opacity: 0, y: size * 0.42, scale: 0.56, rotate: -9 }}
-              animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1, rotate: 0 }}
+              initial={reduced ? { opacity: 0 } : { opacity: 0, y: size * 0.1, scale: 0.7, rotate: -10 }}
+              animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: [0.7, 1.06, 1], rotate: 0 }}
               transition={
                 reduced
                   ? { duration: 0.2 }
                   : {
                       delay: T.rise,
-                      opacity: { delay: T.rise, duration: 0.3, ease: "linear" },
-                      default: { delay: T.rise, type: "spring", stiffness: 150, damping: 15, mass: 1 },
+                      duration: T.riseDuration,
+                      ease: SOFT_EASE,
+                      opacity: { delay: T.rise, duration: 0.18, ease: "linear" },
+                      // Arrives a touch large, then settles: the overshoot gives it weight.
+                      scale: { delay: T.rise, duration: T.riseDuration, times: [0, 0.6, 1], ease: [SOFT_EASE, "easeInOut"] },
                     }
               }
             >
-              <motion.div style={{ position: "absolute", inset: 0, opacity: medalOpacity }} aria-hidden="true">
-                <motion.div className="ipc-award__glow" style={{ opacity: uiOpacity }} />
+              <motion.div className="ipc-award__medalwrap" style={{ opacity: medalOpacity }} aria-hidden="true">
+                <motion.div className="ipc-award__glow ipc-award__ui" style={{ opacity: uiOpacity }} />
                 <div className="ipc-award__medal foil-fill">
                   <div className="ipc-award__paper mat-paper" />
                 </div>
-                {!reduced && (
-                  <div
-                    className="ipc-award__gloss ipc-sweep"
-                    data-run="loop"
-                    style={{ "--sweep-delay": `${T.sweep}s` } as CSSProperties}
-                  />
+                {shining && (
+                  <div className="ipc-award__gloss">
+                    <i className="ipc-band" style={{ "--band-delay": `${T.sweep}s` } as CSSProperties} />
+                  </div>
                 )}
               </motion.div>
-              <Stamp stamp={stamp} size={size} rotate={false} decorative />
-              {!reduced && phase === "enter" && <FoilHighlight delay={T.sweep} />}
+              <div className="ipc-award__stamp">
+                <Stamp stamp={stamp} size={size} rotate={false} decorative />
+              </div>
+              {shining && <FoilHighlight delay={T.sweep} />}
             </motion.div>
           </motion.div>
         </div>
 
-        <motion.div style={{ opacity: uiOpacity, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <motion.div className="ipc-award__copy ipc-award__ui" style={{ opacity: uiOpacity }}>
           <motion.h2 id={titleId} className="ipc-award__title type-display foil-text" {...copy(T.copy)}>
             {strings.moments.provincialTitle}
           </motion.h2>
@@ -531,12 +849,11 @@ function AwardOverlay({
             animate={reduced ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
             transition={reduced ? { duration: 0.2 } : { delay: T.cta, duration: 0.6, ease: SOFT_EASE }}
           >
-            <button ref={ctaRef} type="button" className="ipc-award__cta foil-fill" onClick={add} disabled={!interactive}>
-              {!reduced && (
+            <button ref={ctaRef} type="button" className="ipc-award__cta foil-fill" onClick={onAddClick} disabled={!interactive}>
+              {shining && (
                 <span
-                  className="ipc-award__cta-shine ipc-sweep"
-                  data-run="loop"
-                  style={{ "--sweep-delay": `${T.cta + 0.7}s` } as CSSProperties}
+                  className="ipc-award__cta-shine ipc-band"
+                  style={{ "--band-delay": `${T.cta + 0.7}s` } as CSSProperties}
                   aria-hidden="true"
                 />
               )}
@@ -547,26 +864,28 @@ function AwardOverlay({
               <span style={{ position: "relative" }}>{celebrationStrings.award.cta}</span>
             </button>
           </motion.div>
+          <motion.div {...(reduced ? copy(0) : { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { delay: T.cta + 0.2, duration: 0.5, ease: "linear" as const } })}>
+            <button
+              ref={skipRef}
+              type="button"
+              className="ipc-award__skip"
+              onClick={onSkipClick}
+              disabled={!interactive}
+              aria-label={celebrationStrings.award.skipAria}
+            >
+              {celebrationStrings.award.skip}
+            </button>
+          </motion.div>
         </motion.div>
       </div>
 
-      <motion.div style={{ opacity: uiOpacity }}>
-        <button
-          ref={skipRef}
-          type="button"
-          className="ipc-award__skip"
-          onClick={skip}
-          disabled={!interactive}
-          aria-label={celebrationStrings.award.skipAria}
-        >
-          {celebrationStrings.award.skip}
-        </button>
+      <motion.div className="ipc-award__ui" style={{ opacity: uiOpacity }}>
         <span className="ipc-award__sample" aria-hidden="true">
           {strings.sample.tag}
         </span>
       </motion.div>
 
-      {/* The impression left where the stamp lands. */}
+      {/* What the landing leaves behind: two rings and one glint across the impression. */}
       {impactAt && !reduced && (
         <div aria-hidden="true">
           <motion.div
@@ -578,8 +897,8 @@ function AwardOverlay({
               height: impactAt.d,
               boxShadow: "0 0 0 2px var(--ink-provincial)",
             }}
-            initial={{ opacity: 0.5, scale: 0.96 }}
-            animate={{ opacity: 0, scale: 1.3 }}
+            initial={{ opacity: 0.62, scale: 0.96 }}
+            animate={{ opacity: 0, scale: 1.32 }}
             transition={{ duration: 0.6, ease: SOFT_EASE }}
           />
           <motion.div
@@ -595,6 +914,23 @@ function AwardOverlay({
             animate={{ opacity: 0, scale: 1.62 }}
             transition={{ delay: 0.05, duration: 0.75, ease: SOFT_EASE }}
           />
+          <div
+            className="ipc-award__glint"
+            style={{
+              left: impactAt.x - impactAt.d * 0.47,
+              top: impactAt.y - impactAt.d * 0.47,
+              width: impactAt.d * 0.94,
+              height: impactAt.d * 0.94,
+              transform: `rotate(${tilt}deg)`,
+            }}
+          >
+            <motion.i
+              style={{ skewX: -20 }}
+              initial={{ x: "-150%" }}
+              animate={{ x: "290%" }}
+              transition={{ delay: T.glint, duration: GLINT_DURATION, ease: [0.3, 0, 0.5, 1] }}
+            />
+          </div>
         </div>
       )}
 

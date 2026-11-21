@@ -1,0 +1,450 @@
+/*
+ * Shared UI for the design options (src/components/options-ui).
+ *   opt-   option stage, the A · B · C switcher, helpers
+ *   ips-   island search (combobox)
+ *   ipp-   photo slots and their placeholders
+ * Everything reads the `--o-*` palette variables published under [data-option] (see
+ * src/lib/options/palettes.ts), with literal fallbacks so the pieces also work in a lab.
+ * `--o-font` is the UI typeface: set it on an option's root to change it everywhere.
+ */
+
+/* ------------------------------------------------------------------ page */
+
+/* While an option is on screen the page behind it is light, whatever the passport theme is. */
+html[data-option] {
+  background: var(--o-bg);
+  color-scheme: light !important;
+}
+
+html[data-option] body {
+  background: var(--o-bg);
+  color: var(--o-ink);
+  transition: none;
+}
+
+.opt-stage {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--o-bg);
+  color: var(--o-ink);
+  color-scheme: light;
+  font-family: var(--o-font, var(--nf-hanken, system-ui)), system-ui, sans-serif;
+  animation: opt-stage-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes opt-stage-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The server rendered one option but the visitor's saved choice is another: stay invisible for
+   the instant it takes to swap, instead of flashing the wrong design. */
+html[data-option="a"] .opt-stage:not([data-option-root="a"]),
+html[data-option="b"] .opt-stage:not([data-option-root="b"]),
+html[data-option="c"] .opt-stage:not([data-option-root="c"]) {
+  visibility: hidden;
+}
+
+.opt-loading {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: linear-gradient(180deg, var(--o-bg), var(--o-bg-alt));
+}
+
+.opt-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* -------------------------------------------------------------- switcher */
+
+.opt-switch {
+  position: fixed;
+  z-index: 80;
+  left: calc(12px + env(safe-area-inset-left, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px) + var(--opt-switch-lift, 0px));
+  font-family: var(--nf-plex-mono, ui-monospace), ui-monospace, monospace;
+  transition: bottom 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (min-width: 768px) {
+  .opt-switch {
+    left: auto;
+    bottom: auto;
+    top: calc(var(--opt-switch-top, 16px) + env(safe-area-inset-top, 0px));
+    right: calc(var(--opt-switch-right, 16px) + env(safe-area-inset-right, 0px));
+  }
+}
+
+.opt-switch-group {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 34px);
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--o-ink, #0d2b33) 14%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--o-surface, #fff) 78%, transparent);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow:
+    0 1px 2px rgba(10, 30, 40, 0.06),
+    0 6px 18px rgba(10, 30, 40, 0.1);
+}
+
+.opt-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 34px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--o-ink, #0d2b33);
+  transition: transform 0.28s cubic-bezier(0.34, 1.3, 0.44, 1);
+}
+
+.opt-switch[data-option="b"] .opt-switch-thumb {
+  transform: translateX(34px);
+}
+
+.opt-switch[data-option="c"] .opt-switch-thumb {
+  transform: translateX(68px);
+}
+
+.opt-switch-item {
+  position: relative;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--o-ink-muted, #44646b);
+  font: 600 12px/1 inherit;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 0.2s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A finger-sized target around a small letter. */
+.opt-switch-item::before {
+  content: "";
+  position: absolute;
+  inset: -8px 0;
+}
+
+.opt-switch-item[aria-checked="true"] {
+  color: var(--o-surface, #fff);
+}
+
+.opt-switch-item:hover:not([aria-checked="true"]) {
+  color: var(--o-ink, #0d2b33);
+}
+
+.opt-switch-item:focus-visible {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- search */
+
+.ips {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  font-family: var(--o-font, var(--nf-hanken, system-ui)), system-ui, sans-serif;
+  color: var(--o-ink, #0d2b33);
+}
+
+.ips-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 48px;
+  border: 1px solid var(--o-line, #cfe6e6);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--o-surface, #fff) 92%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  backdrop-filter: blur(12px) saturate(1.3);
+  box-shadow:
+    0 1px 2px rgba(10, 30, 40, 0.05),
+    0 8px 24px rgba(10, 30, 40, 0.08);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+}
+
+.ips-field:focus-within {
+  border-color: var(--o-accent, #0b7f7a);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--o-accent, #0b7f7a) 22%, transparent),
+    0 8px 24px rgba(10, 30, 40, 0.1);
+}
+
+.ips-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-left: 16px;
+  color: var(--o-ink-muted, #44646b);
+  pointer-events: none;
+}
+
+.ips-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  /* 16px or more, or iOS zooms the page when the field is focused. */
+  font: 500 16px/1.2 inherit;
+  outline: none;
+  appearance: none;
+}
+
+.ips-input::placeholder {
+  color: var(--o-ink-muted, #44646b);
+  opacity: 1;
+}
+
+.ips-clear {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--o-ink-muted, #44646b);
+  cursor: pointer;
+}
+
+.ips-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ips-clear:hover {
+  background: var(--o-accent-soft, #d6f1ee);
+  color: var(--o-ink, #0d2b33);
+}
+
+.ips-clear:focus-visible {
+  outline: 2px solid var(--o-accent, #0b7f7a);
+  outline-offset: -2px;
+}
+
+.ips-list {
+  position: absolute;
+  z-index: 30;
+  left: 0;
+  right: 0;
+  top: calc(100% + 8px);
+  margin: 0;
+  padding: 6px;
+  max-height: min(56vh, 380px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  border: 1px solid var(--o-line, #cfe6e6);
+  border-radius: 20px;
+  background: var(--o-surface, #fff);
+  box-shadow:
+    0 2px 6px rgba(10, 30, 40, 0.06),
+    0 18px 44px rgba(10, 30, 40, 0.16);
+  animation: ips-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: top center;
+}
+
+.ips[data-placement="above"] .ips-list {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom center;
+}
+
+@keyframes ips-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+}
+
+.ips-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ips-option[data-active] {
+  background: var(--o-accent-soft, #d6f1ee);
+}
+
+.ips-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--o-accent, #0b7f7a);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--o-accent, #0b7f7a) 18%, transparent);
+}
+
+.ips-option[data-status="coming-soon"] .ips-dot {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px var(--o-ink-muted, #44646b);
+}
+
+.ips-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.ips-name {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ips-name mark {
+  background: none;
+  color: var(--o-accent, #0b7f7a);
+}
+
+.ips-meta {
+  overflow: hidden;
+  color: var(--o-ink-muted, #44646b);
+  font-size: 12.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ips-badge {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--o-ink, #0d2b33) 7%, transparent);
+  color: var(--o-ink-muted, #44646b);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ips-empty {
+  padding: 14px 12px;
+  color: var(--o-ink-muted, #44646b);
+  font-size: 14px;
+}
+
+/* ---------------------------------------------------------------- photos */
+
+.ipp {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background-color: var(--o-accent-soft, #d6f1ee);
+  background-size: cover;
+  background-position: center;
+}
+
+.ipp[data-fill] {
+  position: absolute;
+  inset: 0;
+}
+
+.ipp-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.ipp[data-loaded] .ipp-img {
+  opacity: 1;
+}
+
+/* Placeholder: a soft wash in the option's colours with a faint line drawing of the subject. */
+.ipp-empty {
+  --ipp-a: var(--o-accent-soft, #d6f1ee);
+  --ipp-b: var(--o-ocean, #bfe9ee);
+  --ipp-c: var(--o-bg-alt, #dff4f3);
+  --ipp-ink: var(--o-accent, #0b7f7a);
+  background:
+    radial-gradient(120% 90% at 18% 12%, color-mix(in srgb, var(--ipp-c) 92%, #fff) 0%, transparent 60%),
+    radial-gradient(110% 100% at 88% 96%, var(--ipp-b) 0%, transparent 62%),
+    linear-gradient(160deg, var(--ipp-a), color-mix(in srgb, var(--ipp-b) 55%, var(--ipp-a)));
+}
+
+.ipp-empty[data-mood="1"] {
+  --ipp-a: color-mix(in srgb, var(--o-second, #e9824f) 16%, var(--o-surface, #fff));
+  --ipp-b: var(--o-accent-soft, #d6f1ee);
+  --ipp-ink: var(--o-second, #e9824f);
+}
+
+.ipp-empty[data-mood="2"] {
+  --ipp-a: var(--o-green, #cdeccd);
+  --ipp-b: var(--o-ocean, #bfe9ee);
+}
+
+.ipp-empty[data-mood="3"] {
+  --ipp-a: var(--o-bg-alt, #dff4f3);
+  --ipp-b: color-mix(in srgb, var(--o-second, #e9824f) 22%, var(--o-surface, #fff));
+}
+
+.ipp-art {
+  position: absolute;
+  inset: 12%;
+  background: var(--ipp-ink);
+  opacity: 0.2;
+  -webkit-mask: center / contain no-repeat;
+  mask: center / contain no-repeat;
+}
+
+.ipp-tag {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--o-surface, #fff) 70%, transparent);
+  color: var(--o-ink-muted, #44646b);
+  font: 600 9.5px/1.5 var(--nf-plex-mono, ui-monospace), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opt-stage,
+  .ips-list {
+    animation: none;
+  }
+  .opt-switch-thumb,
+  .opt-switch,
+  .ipp-img {
+    transition: none;
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "photos": {
+    "bohol-hero": {
+      "width": 1672,
+      "height": 941,
+      "sources": [
+        {
+          "file": "bohol-hero-640w.webp",
+          "width": 640
+        },
+        {
+          "file": "bohol-hero-1280w.webp",
+          "width": 1280
+        },
+        {
+          "file": "bohol-hero-1672w.webp",
+          "width": 1672
+        }
+      ],
+      "color": "#665533",
+      "blur": "data:image/webp;base64,UklGRnAAAABXRUJQVlA4IGQAAADwAwCdASoYAA4APt1iqUyopiQiMAgBEBuJZgCdAGXz6vP/rYd2JuqAAOH8konyS+K1+0fOBR/GnOJtuoO1baD5SNH4D0kwNyEhSp+p09/Z5SDgljF11FLtpLBuTBFV0lGoAAAA"
+    }
+  }
+}

@@ -79,7 +79,11 @@ export function inkFlecks(id: string, shape: StampShape): Fleck[] {
     const base = near ? Math.PI * 0.72 : Math.PI * 2 * rnd(id, `fleck-a${i}`);
     const angle = base + (near ? (rnd(id, `fleck-j${i}`) - 0.5) * 1.5 : 0);
     const e = edge(shape, angle);
-    const dist = e + 0.09 + rnd(id, `fleck-d${i}`) * (near ? 0.2 : 0.13);
+    let dist = e + 0.09 + rnd(id, `fleck-d${i}`) * (near ? 0.2 : 0.13);
+    // The stamp's caption sits right under its box (from about 1.06). A fleck that lands there
+    // reads as a full stop in the title ("SPINNER.DOLPHINS"), so none lands below the box.
+    const down = Math.sin(angle) * dist;
+    if (down > 1) dist /= down;
     const big = i === 1;
     flecks.push({
       x: Math.cos(angle) * dist,

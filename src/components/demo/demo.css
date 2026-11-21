@@ -4,13 +4,25 @@
  * Motion here is transform and opacity only, and all of it stops under prefers-reduced-motion.
  */
 
+/* The home page is one screen: nothing to rubber-band, nothing to pull to refresh mid-swipe. */
+html,
+body {
+  overscroll-behavior: none;
+}
+
 .ipd {
-  /* What surrounds the book, top to bottom. The book takes the height that is left. */
+  /*
+   * What surrounds the book, top to bottom. The book takes the height that is left, so these
+   * have to add up to the real heights: every block below is sized to its budget, not the
+   * other way round. Defaults are a tall phone (800px and up); see "Sizes" for the rest.
+   */
+  --ipd-vh: 100vh;
   --ipd-head: 62px; /* sticky header, one row */
-  --ipd-top: 60px; /* intro line or notice */
+  --ipd-top: 70px; /* intro (tag and two lines) or a notice (title and two lines) */
   --ipd-hint: 28px;
-  --ipd-bar: 164px; /* floating action bar, without the safe area */
+  --ipd-bar: 174px; /* action bar: 159px card with a two-line note, 12px below, 3px above */
   --ipd-gap: 18px; /* block padding of the book itself */
+  --ipd-bot: 0px; /* clear space under the hint (desktop) */
 
   position: relative;
   display: flex;
@@ -19,12 +31,26 @@
   min-height: 100dvh;
   color: var(--fg);
   font-family: var(--ff-body);
-  overflow-x: hidden;
 }
 
+/* Small viewport units where they exist: everything must fit under a phone browser's own bars. */
+@supports (height: 1svh) {
+  .ipd {
+    --ipd-vh: 100svh;
+  }
+}
+
+/* Sideways overflow (the opened cover, the glow) is clipped without making .ipd a scroll
+   container: that would take the sticky header with it. Old Safari clips on the body instead. */
 @supports (overflow: clip) {
   .ipd {
     overflow-x: clip;
+  }
+}
+
+@supports not (overflow: clip) {
+  body {
+    overflow-x: hidden;
   }
 }
 
@@ -90,10 +116,11 @@
 
 .ipd-top {
   position: relative;
+  flex: none;
   width: 100%;
   max-width: 468px;
-  min-height: var(--ipd-top);
-  padding: 12px 18px 0;
+  height: var(--ipd-top);
+  padding: 10px 18px 0;
   z-index: 30;
 }
 
@@ -101,7 +128,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   margin: 0;
   text-align: center;
   transition:
@@ -119,16 +146,24 @@
   letter-spacing: 0.18em;
 }
 
+/* Two lines at most, inside the height reserved above the book. */
 .ipd-intro__text {
-  font-size: 13.5px;
-  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 13px;
+  line-height: 1.3;
   color: var(--fg-muted);
-  white-space: nowrap;
+  text-wrap: balance;
 }
 
+/* A notice lies over the intro, inside the same reserved height: the book never moves for it,
+   and on a tall phone it never reaches the book either. */
 .ipd-notice-slot {
   position: absolute;
-  top: 8px;
+  top: 6px;
   left: 12px;
   right: 12px;
   pointer-events: none;
@@ -139,7 +174,7 @@
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  padding: 11px 38px 12px 13px;
+  padding: 10px 38px 11px 13px;
   border-radius: var(--r-card);
   background: var(--bg-elev);
   box-shadow:
@@ -157,12 +192,14 @@
   margin-top: 4px;
   border-radius: 50%;
   background: var(--fg-subtle);
-  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 0%, transparent);
 }
 
+/* The halo is a tint of the status colour where color-mix() exists, a neutral ring elsewhere
+   (Safari before 16.2). A var() inside color-mix() is only rejected at computed-value time,
+   which discards earlier declarations too, so the tints sit behind @supports. */
 .ipd-notice[data-tone="discovery"] .ipd-notice__mark {
   background: var(--status-discovery);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-discovery) 16%, transparent);
+  box-shadow: 0 0 0 4px var(--line);
 }
 
 /* Pending is a hollow, dashed mark here too: never the look of something completed. */
@@ -177,7 +214,16 @@
 
 .ipd-notice[data-tone="verified"] .ipd-notice__mark {
   background: var(--status-verified);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-verified) 18%, transparent);
+  box-shadow: 0 0 0 4px var(--line);
+}
+
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .ipd-notice[data-tone="discovery"] .ipd-notice__mark {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-discovery) 16%, transparent);
+  }
+  .ipd-notice[data-tone="verified"] .ipd-notice__mark {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-verified) 18%, transparent);
+  }
 }
 
 .ipd-notice[data-tone="provincial"] .ipd-notice__mark {
@@ -197,12 +243,19 @@
   font-weight: 650;
   line-height: 1.25;
   color: var(--fg);
+  text-wrap: balance;
 }
 
+/* Two lines is what the layout reserves; a longer body is cut there rather than covering the page. */
 .ipd-notice__body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   font-size: 12.5px;
   line-height: 1.38;
   color: var(--fg-muted);
+  text-wrap: pretty;
 }
 
 .ipd-notice__close {
@@ -217,9 +270,16 @@
   border: 0;
   border-radius: 50%;
   background: none;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* 32px drawn, 44px to the finger. */
+.ipd-notice__close::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
 }
 
 .ipd-notice__close:focus-visible {
@@ -318,17 +378,14 @@
 .ipd .ipd-book {
   --ipb-pad: var(--ipd-gap);
   --ipb-margin: 24px;
-  --ipb-max-h: clamp(280px, calc(100vh - var(--ipd-head) - var(--ipd-top) - var(--ipd-hint) - var(--ipd-bar) - 2 * var(--ipd-gap)), 620px);
-}
-
-@supports (height: 1svh) {
-  .ipd .ipd-book {
-    --ipb-max-h: clamp(
-      280px,
-      calc(100svh - var(--ipd-head) - var(--ipd-top) - var(--ipd-hint) - var(--ipd-bar) - 2 * var(--ipd-gap) - env(safe-area-inset-bottom, 0px)),
-      620px
-    );
-  }
+  --ipb-max-h: clamp(
+    260px,
+    calc(
+      var(--ipd-vh) - var(--ipd-head) - var(--ipd-top) - var(--ipd-hint) - var(--ipd-bar) - 2 * var(--ipd-gap) - var(--ipd-bot) -
+        env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)
+    ),
+    620px
+  );
 }
 
 /* Swallows input over the book while a moment plays inside a page. */
@@ -348,27 +405,80 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  min-height: var(--ipd-hint);
+  flex: none;
+  max-width: 100%;
+  height: var(--ipd-hint);
   margin: 0;
   padding: 0 16px;
   font-family: var(--ff-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--fg-subtle);
+  white-space: nowrap;
+  color: var(--fg-muted);
   transition: opacity 0.3s ease;
+}
+
+@media (max-width: 379px) {
+  .ipd-hint {
+    gap: 9px;
+    padding: 0 10px;
+    letter-spacing: 0.06em;
+  }
 }
 
 .ipd-hint[data-quiet] {
   opacity: 0;
 }
 
+/* One line, always: a hint that is still too long is cut at the edge instead of wrapping under
+   the action bar. The padding (taken back by the margin) keeps the pulse ring and the button's
+   hit area inside the clip. */
 .ipd-hint__text {
   display: inline-flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
+  margin: -18px -12px;
+  padding: 18px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   animation: ipd-hint-in 0.5s var(--ease-out-soft) both;
+}
+
+/* A text button in the hint line ("Play full motion"). */
+.ipd-hint__btn {
+  position: relative;
+  flex: none;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  /* The component resets colour to "inherit" inline; the action reads one step stronger. */
+  color: var(--fg) !important;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 44px tall to the finger, whatever the line height. It grows upwards: the action bar is right below. */
+.ipd-hint__btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 44px;
+}
+
+.ipd-hint__btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -3px;
 }
 
 @keyframes ipd-hint-in {
@@ -380,6 +490,7 @@
 
 .ipd-hint__pulse {
   position: relative;
+  flex: none;
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -407,20 +518,31 @@
 }
 
 .ipd-hint__page {
+  flex: none;
   padding-left: 12px;
   border-left: 1px solid var(--line-strong);
   color: var(--fg-muted);
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The disclaimer. On phones the page is exactly one screen, so this is kept for assistive tech
+ * only: the "Sample concept demo" tag, the page footers and the detail sheet say it on screen.
+ * On desktop it is shown under the story card (see "Sizes").
+ */
 .ipd-foot {
-  max-width: 44ch;
-  margin-top: 26px;
-  padding: 0 22px 18px;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
   font-size: 11.5px;
   line-height: 1.5;
   text-align: center;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
 }
 
 .ipd-foot p {
@@ -439,16 +561,15 @@
   z-index: 45;
   padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
   pointer-events: none;
-  animation: ipd-bar-in 0.7s var(--ease-out-soft) 0.25s both;
 }
 
-/* Whatever scrolls under the bar fades into the background instead of colliding with the card. */
+/* Whatever scrolls under the bar fades into the background instead of colliding with the card.
+   It is there, opaque, from the first frame: only the card animates in. */
 .ipd-bar::before {
   content: "";
   position: absolute;
   inset: 0;
   background: linear-gradient(to bottom, transparent, var(--bg) 40%);
-  opacity: 0.94;
 }
 
 @keyframes ipd-bar-in {
@@ -458,11 +579,16 @@
   }
 }
 
+/* A fixed height, so the card (and with it the layout budget) is the same in every step. */
 .ipd-bar__card {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
   max-width: 444px;
+  height: 159px;
   margin: 0 auto;
-  padding: 10px 12px 10px;
+  padding: 10px 12px 6px;
   border-radius: calc(var(--r-card) + 8px);
   background: var(--bg-elev);
   box-shadow:
@@ -471,6 +597,7 @@
     0 2px 5px rgba(0, 0, 0, 0.06),
     0 22px 44px -20px rgba(0, 0, 0, 0.5);
   pointer-events: auto;
+  animation: ipd-bar-in 0.7s var(--ease-out-soft) 0.25s both;
 }
 
 [data-theme="dark"] .ipd-bar__card {
@@ -485,6 +612,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex: none;
   min-height: 34px;
   padding: 0 2px 0 4px;
 }
@@ -497,6 +625,7 @@
 }
 
 .ipd-tool {
+  position: relative;
   display: grid;
   place-items: center;
   width: 36px;
@@ -512,6 +641,13 @@
     transform 0.2s var(--ease-out-soft),
     color 0.2s ease,
     opacity 0.2s ease;
+}
+
+/* 36 by 34 drawn, 44 by 44 to the finger. */
+.ipd-tool::after {
+  content: "";
+  position: absolute;
+  inset: -5px -4px;
 }
 
 .ipd-tool:active {
@@ -592,7 +728,57 @@
 
 .ipd-steps__item[data-state="done"] + .ipd-steps__item::before,
 .ipd-steps__item[data-state="done"] + .ipd-steps__item--reward::before {
-  background: color-mix(in srgb, var(--fg) 46%, transparent);
+  background: var(--fg-subtle);
+}
+
+/*
+ * Each step is a button (it puts the story at the start of that step). The button takes over
+ * the flex row the list item used to lay out, so the stepper looks the same with or without it.
+ */
+.ipd-steps__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+  flex: none;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 22px dot, 44px to the finger. */
+.ipd-steps__btn::after {
+  content: "";
+  position: absolute;
+  inset: -11px;
+}
+
+.ipd-steps__btn:disabled {
+  cursor: default;
+  pointer-events: none;
+}
+
+.ipd-steps__btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .ipd-steps__item:not([data-state="current"]) .ipd-steps__btn:hover .ipd-steps__dot {
+    transform: scale(1.1);
+  }
+}
+
+.ipd-steps__btn:active .ipd-steps__dot {
+  transform: scale(0.92);
 }
 
 .ipd-steps__dot {
@@ -607,7 +793,8 @@
   font-size: 10.5px;
   font-weight: 600;
   line-height: 1;
-  color: var(--fg-subtle);
+  /* The numerals of the steps still to come: --fg-subtle is too faint for 10.5px text. */
+  color: var(--fg-muted);
   transition:
     background-color 0.4s ease,
     box-shadow 0.4s ease,
@@ -619,24 +806,45 @@
   background: var(--step);
   box-shadow:
     inset 0 0 0 1.5px var(--step),
-    0 0 0 4px color-mix(in srgb, var(--step) 18%, transparent);
+    0 0 0 4px var(--line);
   color: var(--bg-elev);
   transform: scale(1.06);
 }
 
 /* Donation pending is always hollow and dashed, in the bar as on the stamp. */
 .ipd-steps__item[data-step="donate"][data-state="current"] .ipd-steps__dot {
-  background: color-mix(in srgb, var(--step) 12%, transparent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--step) 14%, transparent);
+  background: transparent;
+  box-shadow: 0 0 0 4px var(--line);
   outline: 1.5px dashed var(--step);
   outline-offset: -1.5px;
   color: var(--step);
 }
 
 .ipd-steps__item[data-state="done"] .ipd-steps__dot {
-  background: color-mix(in srgb, var(--step) 15%, transparent);
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--step) 60%, transparent);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--step);
   color: var(--step);
+}
+
+/* Fills and halos as tints of the status colour, where color-mix() exists (see the notice marks). */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+  .ipd-steps__item[data-state="done"] + .ipd-steps__item::before,
+  .ipd-steps__item[data-state="done"] + .ipd-steps__item--reward::before {
+    background: color-mix(in srgb, var(--fg) 46%, transparent);
+  }
+  .ipd-steps__item[data-state="current"] .ipd-steps__dot {
+    box-shadow:
+      inset 0 0 0 1.5px var(--step),
+      0 0 0 4px color-mix(in srgb, var(--step) 18%, transparent);
+  }
+  .ipd-steps__item[data-step="donate"][data-state="current"] .ipd-steps__dot {
+    background: color-mix(in srgb, var(--step) 12%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--step) 14%, transparent);
+  }
+  .ipd-steps__item[data-state="done"] .ipd-steps__dot {
+    background: color-mix(in srgb, var(--step) 15%, transparent);
+    box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--step) 60%, transparent);
+  }
 }
 
 .ipd-steps__label {
@@ -666,7 +874,7 @@
 
 .ipd-steps__rosette {
   flex: none;
-  color: var(--fg-subtle);
+  color: var(--fg-muted);
   transition:
     color 0.4s ease,
     transform 0.7s var(--ease-spring);
@@ -688,6 +896,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: none;
   width: 100%;
   height: 54px;
   margin-top: 9px;
@@ -710,7 +919,10 @@
     0 10px 22px -12px var(--accent);
   transition:
     transform 0.18s var(--ease-out-soft),
-    opacity 0.25s ease;
+    opacity 0.25s ease,
+    background-color 0.35s ease,
+    color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
 /* Small radii (Classic, Journal) read better with a squarer button than a pill. */
@@ -719,8 +931,52 @@
   border-radius: calc(var(--r-card) + 2px);
 }
 
+/* Pressed is CSS only, so a tap made before the page has hydrated still answers the finger. */
 .ipd-cta:active {
-  transform: scale(0.975);
+  transform: scale(0.97);
+  transition-duration: 0.06s, 0.25s, 0.35s, 0.35s, 0.35s;
+}
+
+/*
+ * Step 3 is not something the traveler does: the charity confirms on its own side (DON-3), and
+ * the award then follows by itself. The button that simulates it is drawn as an outline in the
+ * Verified colour, without the foil fill or the sheen, so it never reads as a third "pay" button.
+ */
+.ipd-cta[data-step="confirm"],
+.ipd-cta[data-step="award"] {
+  background: transparent;
+  color: var(--fg);
+  box-shadow: inset 0 0 0 1.5px var(--status-verified);
+}
+
+.ipd-cta[data-step="award"] {
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+/* The sheen and the one-off sweep of light: both are decoration, direct children of the button. */
+.ipd-cta[data-step="confirm"] > [aria-hidden="true"],
+.ipd-cta[data-step="award"] > [aria-hidden="true"] {
+  display: none;
+}
+
+.ipd-cta[data-step="confirm"] .ipd-cta__arrow {
+  color: var(--status-verified);
+}
+
+@media (hover: hover) {
+  .ipd-cta[data-step="confirm"]:hover {
+    background: var(--bg-sunken);
+  }
+}
+
+.ipd-cta[data-step="confirm"]:active {
+  background: var(--bg-sunken);
+}
+
+/* Busy keeps the outline, at full strength: the label is the only thing that changes. */
+.ipd-cta[data-step="confirm"][aria-disabled="true"],
+.ipd-cta[data-step="award"][aria-disabled="true"] {
+  opacity: 1;
 }
 
 .ipd-cta[aria-disabled="true"] {
@@ -790,12 +1046,14 @@
   }
 }
 
+/* Sits in the middle of what the card has left under the button: one line or two, a third is cut. */
 .ipd-bar__note {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 1.35em;
-  margin: 8px 0 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  flex: none;
+  overflow: hidden;
+  margin: auto 0;
   padding: 0 8px;
   font-size: 12.5px;
   line-height: 1.35;
@@ -835,7 +1093,8 @@
 .ipd-fps {
   position: fixed;
   left: 8px;
-  bottom: calc(var(--ipd-bar) + 14px + env(safe-area-inset-bottom, 0px));
+  /* Above the hint line, at the foot of the book. */
+  bottom: calc(var(--ipd-bar) + var(--ipd-hint) + 2px + env(safe-area-inset-bottom, 0px));
   z-index: 2000;
   padding: 4px 8px;
   border-radius: 6px;
@@ -853,29 +1112,102 @@
 /* Sizes                                                               */
 /* ------------------------------------------------------------------ */
 
-/* Narrow phones: the header drops its ring label and uses swatches, nothing else changes. */
+/*
+ * One screen. From 530px of height nothing scrolls: .ipd is exactly the small viewport, the
+ * chrome takes its budget and the book takes the rest. A page that scrolled by the height of a
+ * footer let the passport slide under the header on any slightly diagonal swipe.
+ */
+@media (min-height: 530px) {
+  .ipd {
+    height: 100vh;
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ipd-main {
+    min-height: 0;
+  }
+  /* With nothing to pan, every drag on the book is the book's: the browser can no longer take a
+     diagonal one as a scroll (which on iOS also cancels the pointer and drops the page mid-turn).
+     Below this height the page still scrolls, and the book keeps pan-y. */
+  .ipd .ipb__stage,
+  .ipd .ipb__pages,
+  .ipd-block {
+    touch-action: none;
+  }
+}
 
-/* Short screens (in-app browsers with their own bars, landscape phones): trim what is around the book. */
-@media (max-height: 720px) {
+/* clip rather than hidden where it exists: focus can never scroll the clipped box. */
+@supports (overflow: clip) {
+  @media (min-height: 530px) {
+    .ipd {
+      overflow: clip;
+    }
+  }
+}
+
+/* Phones and tablets: room the book cannot use is shared above it and below the hint. */
+@media (min-height: 530px) and (max-width: 1099px) {
+  .ipd-stage {
+    margin-top: auto;
+  }
+  .ipd-hint {
+    margin-bottom: auto;
+  }
+}
+
+/*
+ * Shorter than 800px (a phone browser with its own bars, in-app browsers): the book needs the
+ * height more than the chrome does. The intro keeps its tag only, the step note is left to
+ * assistive tech and the notice is set tighter. Budget: 113px card, 12px below, 5px above.
+ */
+@media (max-height: 799px) {
   .ipd {
     --ipd-top: 30px;
     --ipd-gap: 10px;
     --ipd-hint: 24px;
-    --ipd-bar: 140px;
+    --ipd-bar: 130px;
   }
   .ipd-intro__text {
     display: none;
   }
   .ipd-top {
-    padding-top: 8px;
+    padding-top: 7px;
+  }
+  .ipd-notice-slot {
+    top: 3px;
+    left: 10px;
+    right: 10px;
+  }
+  .ipd-notice {
+    gap: 10px;
+    padding: 7px 36px 8px 12px;
+  }
+  .ipd-notice__text {
+    gap: 1px;
+  }
+  .ipd-notice__title {
+    font-size: 13px;
+    line-height: 1.2;
+  }
+  .ipd-notice__body {
+    font-size: 11.5px;
+    line-height: 1.3;
+  }
+  .ipd-notice__close {
+    top: 1px;
+    right: 2px;
+  }
+  .ipd-bar__card {
+    height: 113px;
+    padding-bottom: 10px;
   }
   .ipd-bar__note {
     position: absolute;
     width: 1px;
     height: 1px;
-    min-height: 0;
     margin: -1px;
-    overflow: hidden;
+    padding: 0;
     clip: rect(0 0 0 0);
   }
   .ipd-cta {
@@ -883,10 +1215,10 @@
   }
 }
 
-/* Landscape phones: the book must not end up below the fold, so the page simply scrolls less chrome. */
+/* Landscape phones: the page scrolls here, so the book only has to clear the action bar. */
 @media (max-height: 480px) {
   .ipd {
-    /* The header scrolls away here, so the book only has to clear the action bar. */
+    /* The header scrolls away, and the intro is dropped. */
     --ipd-head: 0px;
     --ipd-top: 0px;
     --ipd-hint: 22px;
@@ -897,10 +1229,10 @@
     position: relative;
   }
   .ipd .ipd-book {
-    --ipb-max-h: clamp(220px, calc(100vh - var(--ipd-hint) - var(--ipd-bar) - 2 * var(--ipd-gap) - 12px), 620px);
+    --ipb-max-h: clamp(220px, calc(var(--ipd-vh) - var(--ipd-hint) - var(--ipd-bar) - 2 * var(--ipd-gap) - 12px), 620px);
   }
-  .ipd-foot {
-    display: none;
+  .ipd-top {
+    padding: 0;
   }
   .ipd-intro {
     display: none;
@@ -914,6 +1246,7 @@
     align-items: center;
     gap: 12px;
     max-width: 640px;
+    height: auto;
   }
   .ipd-cta {
     height: 46px;
@@ -921,48 +1254,162 @@
   }
 }
 
-/* Desktop: the story card moves beside the passport, which gets the full height for a two-page spread. */
-@media (min-width: 1100px) and (min-height: 600px) {
+/*
+ * Desktop: a two-page spread with the story card beside it, as one centred composition.
+ * The widths are worked out here (the same sum the book does for itself), so that the header,
+ * the book and the card share their outer edges: --ipd-edge is where the book starts on the left
+ * and where the card ends on the right, and the header's content is inset by the same amount.
+ */
+@media (min-width: 1100px) and (min-height: 530px) {
   .ipd {
-    --ipd-top: 74px;
-    --ipd-gap: 26px;
+    --ipd-top: 60px;
+    --ipd-gap: 22px;
+    --ipd-hint: 28px;
     --ipd-bar: 0px;
-    --ipd-side: 388px;
+    --ipd-bot: 28px; /* clear space under the hint */
+    --ipd-gutter: 48px;
+    --ipd-card: 356px;
+    --ipd-cardh: 194px; /* the card with a three-line note */
+    --ipd-colgap: 44px;
+
+    /* The spread: as tall as the screen allows, as wide as the column allows (1.36 = two pages of 0.68). */
+    --ipd-bh: clamp(
+      280px,
+      calc(var(--ipd-vh) - var(--ipd-head) - var(--ipd-top) - var(--ipd-hint) - 2 * var(--ipd-gap) - var(--ipd-bot)),
+      620px
+    );
+    --ipd-bw: min(100vw - 2 * var(--ipd-gutter) - var(--ipd-card) - var(--ipd-colgap), 840px, var(--ipd-bh) * 1.36);
+    --ipd-edge: max(var(--ipd-gutter), (100vw - var(--ipd-bw) - var(--ipd-colgap) - var(--ipd-card)) / 2);
+    /* Vertical middle of the book: the main column is centred, so this does not depend on the book's size. */
+    --ipd-mid: calc((var(--ipd-vh) + var(--ipd-head) + var(--ipd-top) - var(--ipd-hint) - var(--ipd-bot)) / 2);
   }
+
+  .ipd .ipc-header__bar {
+    max-width: none;
+    padding: 0 var(--ipd-edge);
+  }
+
   .ipd-main {
-    padding-right: var(--ipd-side);
-    padding-bottom: 12px;
+    justify-content: center;
+    padding: 0 calc(var(--ipd-edge) + var(--ipd-card) + var(--ipd-colgap)) var(--ipd-bot) var(--ipd-edge);
   }
+
+  /* The column is exactly as wide as the spread. The book's own box reaches 100px past it on
+     both sides: it lays out a spread from 780px of width, and it clips its shadow at its edge. */
+  .ipd .ipd-book {
+    --ipb-margin: 0px;
+    --ipb-max-h: var(--ipd-bh);
+    --ipb-max-w: calc(var(--ipd-bw) / 2);
+    width: calc(100% + 200px);
+    margin-inline: -100px;
+  }
+
   .ipd-top {
-    padding-top: 18px;
+    max-width: 640px;
+    padding-top: 12px;
   }
   .ipd-intro__text {
+    display: -webkit-box;
     font-size: 15px;
   }
+
+  /* The story card: beside the book, centred on it. */
   .ipd-bar {
-    top: var(--ipd-head);
+    top: calc(var(--ipd-mid) - var(--ipd-cardh) / 2);
+    right: var(--ipd-edge);
+    bottom: auto;
     left: auto;
-    width: var(--ipd-side);
-    display: flex;
-    align-items: center;
-    padding: 0 32px 40px 0;
+    width: var(--ipd-card);
+    padding: 0;
   }
   .ipd-bar::before {
     display: none;
   }
   .ipd-bar__card {
-    width: 100%;
-    padding: 16px 16px 14px;
+    max-width: none;
+    height: var(--ipd-cardh);
+    padding: 16px 16px 10px;
   }
   .ipd-bar__note {
-    min-height: 2.7em;
-    margin-top: 10px;
+    position: static;
+    width: auto;
+    height: auto;
+    margin: auto 0;
+    padding: 0 8px;
+    clip: auto;
+    -webkit-line-clamp: 3;
   }
   .ipd-cta {
+    height: 54px;
     margin-top: 14px;
   }
+
+  /* Notices belong to the story: they land directly above the card, at its width. */
+  .ipd-notice-slot {
+    position: fixed;
+    top: calc(var(--ipd-mid) - var(--ipd-cardh) / 2 - 12px);
+    right: var(--ipd-edge);
+    left: auto;
+    width: var(--ipd-card);
+    height: 0;
+  }
+  .ipd-notice {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    gap: 11px;
+    padding: 11px 38px 12px 13px;
+  }
+  .ipd-notice__text {
+    gap: 2px;
+  }
+  .ipd-notice__title {
+    font-size: 14px;
+    line-height: 1.25;
+  }
+  .ipd-notice__body {
+    font-size: 12.5px;
+    line-height: 1.38;
+  }
+  .ipd-notice__close {
+    top: 4px;
+    right: 4px;
+  }
+
+  /* The disclaimer, as a caption under the card. */
+  .ipd-foot {
+    position: fixed;
+    top: calc(var(--ipd-mid) + var(--ipd-cardh) / 2 + 16px);
+    right: var(--ipd-edge);
+    width: var(--ipd-card);
+    height: auto;
+    margin: 0;
+    padding: 0 18px;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    text-wrap: balance;
+  }
+
   .ipd-fps {
     bottom: 12px;
+  }
+}
+
+/* A laptop screen under the browser's own bars: the intro keeps its tag only, and the spread
+   gets the height. */
+@media (min-width: 1100px) and (min-height: 530px) and (max-height: 719px) {
+  .ipd {
+    --ipd-top: 38px;
+    --ipd-gap: 16px;
+    --ipd-bot: 16px;
+  }
+  .ipd-top {
+    padding-top: 10px;
+  }
+  .ipd-intro__text {
+    display: none;
   }
 }
 
@@ -974,7 +1421,7 @@
   .ipd-stage,
   .ipd-float,
   .ipd-ground,
-  .ipd-bar,
+  .ipd-bar__card,
   .ipd-hint__text,
   .ipd-hint__pulse::after,
   .ipd-steps__label,
@@ -987,5 +1434,13 @@
   .ipd-steps__rosette,
   .ipd-intro {
     transition: none !important;
+  }
+}
+
+/* The narrowest phones (320 px): two lines cut the "Donation pending" body before "confirms",
+   which is the point of the message. A third line costs 15 px more over the page's running head. */
+@media (max-width: 340px) {
+  .ipd-notice__body {
+    -webkit-line-clamp: 3;
   }
 }

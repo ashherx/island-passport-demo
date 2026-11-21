@@ -157,8 +157,25 @@ const COMMIT_TRAVEL = 0.3;
 const VELOCITY_WINDOW = 100;
 /** A finger that has rested this long before lifting has no velocity (ms). */
 const REST_MS = 90;
-/** Longest a riffle through several pages may take (ms). */
+/** Longest a riffle through several pages may take in a spread (ms). */
 const RIFFLE_MS = 1000;
+/**
+ * One page at a time, a riffle has the rhythm of a hand rather than a fixed tempo: the first leaf
+ * is picked up, the ones in between are let go quickly, the last one is laid down (ms per leaf).
+ */
+const RIFFLE_LEAF_MS = { first: 230, middle: 160, last: 280 } as const;
+/**
+ * One page at a time, only half of a turn happens on the page; the other half is to the left of
+ * the spine, where there is nothing to see. Going forward the leaf is all but gone once it is
+ * LEAVE_AT of the way (a strip beside the spine is left, and an ease-out would spend a third of
+ * the flip on it). Coming back the sheet is laid down when it is LAND_AT of the way.
+ */
+const LEAVE_AT = 0.92;
+/** Share of a turn that the second and later leaves of a riffle skip at their start. */
+const RIFFLE_HEAD = 0.1;
+const LAND_AT = 0.985;
+/** Touches that start this close to the left edge of the screen belong to the browser's back swipe (px). */
+const SYSTEM_EDGE = 20;
 /** Outer share of a page where a tap or click turns it. */
 const EDGE_ZONE = 0.2;
 /** Things inside a page that must keep their own taps and drags. */
@@ -197,6 +214,14 @@ const EASE_RELEASE = cubicBezier(0.22, 0.72, 0.2, 1);
 const EASE_OUT = cubicBezier(0.2, 0.7, 0.2, 1);
 /** Pages thumbed through one after another: no pause at either end. */
 const EASE_RIFFLE = cubicBezier(0.36, 0.04, 0.36, 1);
+/*
+ * One page at a time a riffle is one movement, not a row of separate turns: the first leaf is
+ * picked up from rest and leaves at speed, the ones in between never stop, and the last one
+ * comes off fast and is laid down.
+ */
+const EASE_RIFFLE_FIRST = cubicBezier(0.25, 0.15, 0.7, 0.75);
+const EASE_RIFFLE_MIDDLE = cubicBezier(0.3, 0.2, 0.7, 0.8);
+const EASE_RIFFLE_LAST = cubicBezier(0.2, 0.4, 0.4, 1);
 
 function el(className: string, html = ""): HTMLDivElement {
   const node = document.createElement("div");
@@ -361,8 +386,8 @@ export class FlipEngine {
   private page: number;
   /** Duration multiplier for programmatic flips; below 1 while riffling. */
   private tempo = 1;
-  /** Flips still to start in the riffle under way, and their direction. */
-  private riffle: { left: number; dir: 1 | -1 } | null = null;
+  /** Flips still to start in the riffle under way, how many it has in all, and their direction. */
+  private riffle: { left: number; total: number; dir: 1 | -1 } | null = null;
   private riffleDue = false;
   private prewarmed = false;
   private resisting = false;
@@ -569,8 +594,9 @@ export class FlipEngine {
   }
 
   /**
-   * Turn to a page the way a hand does: up to four pages are thumbed through one after another,
-   * quicker the more there are (RIFFLE_MS at most in total). Further than that it is one flip.
+   * Turn to a page the way a hand does: up to four pages are thumbed through one after another
+   * (RIFFLE_LEAF_MS each on a phone; in a spread quicker the more there are, RIFFLE_MS at most in
+   * total). Further than that it is one flip.
    * onFlip fires once, when the last page lands.
    */
   flipThrough(page: number): void {
@@ -586,8 +612,9 @@ export class FlipEngine {
     }
     this.cancelDrag();
     this.render.finishAnimation();
-    this.riffle = { left: count, dir: to > from ? 1 : -1 };
-    this.tempo = clamp(RIFFLE_MS / (count * FLIP_MS[this.mode]), 0.3, 1);
+    this.riffle = { left: count, total: count, dir: to > from ? 1 : -1 };
+    // One page at a time each leaf has its own length (see patchAnimation).
+    this.tempo = this.mode === "double" ? clamp(RIFFLE_MS / (count * FLIP_MS[this.mode]), 0.3, 1) : 1;
     this.stepRiffle();
   }
 
@@ -879,6 +906,10 @@ export class FlipEngine {
     if (this.riffleDue) {
       this.riffleDue = false;
       this.stepRiffle();
+      // Draw the new leaf's first frame now: otherwise this frame shows the page lying flat
+      // between two leaves, and the riffle stutters.
+      const next = this.render.animation;
+      if (next && !this.dead) this.render.render(next.startedAt);
     }
 
     if (this.dirty > 0) this.dirty--;
@@ -974,6 +1005,10 @@ export class FlipEngine {
       let duration: number;
       let ease: (t: number) => number;
       let lift = 0;
+      const riffle = needReset && !release ? this.riffle : null;
+      // Position in a riffle: riffle.left has already been counted down for this leaf.
+      const lastLeaf = !!riffle && riffle.left === 0;
+      const firstLeaf = !!riffle && riffle.left === riffle.total - 1;
       if (!needReset) {
         // Corner peel under a hovering mouse.
         duration = 240;
@@ -983,9 +1018,47 @@ export class FlipEngine {
         ease = EASE_RELEASE;
       } else {
         duration = clamp(full * (0.42 + 0.58 * share), 260, full) * this.tempo;
-        ease = this.riffle ? EASE_RIFFLE : share > 0.6 ? EASE_TURN : EASE_OUT;
+        const single = this.mode === "single";
+        if (!riffle) ease = share > 0.6 ? EASE_TURN : EASE_OUT;
+        else if (!single) ease = EASE_RIFFLE;
+        else ease = lastLeaf ? EASE_RIFFLE_LAST : firstLeaf ? EASE_RIFFLE_FIRST : EASE_RIFFLE_MIDDLE;
         // Whole flips bow towards the middle of the page, so the fold line swings as it travels.
-        if (share > 0.6) lift = h * (flatBack ? 0.02 : this.riffle ? 0.07 : 0.1);
+        // So does the last leaf of a riffle on a phone, which is laid down like a single turn.
+        if (share > 0.6) lift = h * (flatBack ? 0.02 : !riffle || (single && lastLeaf) ? 0.1 : 0.07);
+      }
+
+      /* One page at a time: play only the part of the turn that happens on the page, so the flip
+         is over (page reported, input free, next leaf of a riffle started) when it looks over.
+         `from`..`to` is the stretch of the ease that is played; `gain` stretches it so that the
+         last frame is still the destination, with the sheet arriving at speed instead of cut off. */
+      let from = 0;
+      let to = 1;
+      let gain = 1;
+      if (this.mode === "single" && needReset && dest.x < 0) {
+        const reach = (target: number): number => {
+          let lo = 0;
+          let hi = 1;
+          for (let i = 0; i < 20; i++) {
+            const mid = (lo + hi) / 2;
+            if (ease(mid) < target) lo = mid;
+            else hi = mid;
+          }
+          return hi;
+        };
+        // Forward: the leaf goes over the spine. Back: the sheet lands on the page (the last leaf
+        // of a riffle and a single turn softly, the leaves in between without waiting).
+        if (!back) to = reach(LEAVE_AT);
+        else to = reach(riffle && !lastLeaf ? LEAVE_AT : LAND_AT);
+        gain = 1 / ease(to);
+        // Back: the sheet is left of the spine until its corner has crossed it.
+        if (back && start.x > 0 && dx < 0) from = Math.min(reach(clamp(start.x / -dx, 0, 1) / gain), to);
+        /* Thumbed through, the next leaf is already coming up as the one before it goes: it
+           starts a little way in, past the stretch where only a corner would be seen to lift. */
+        if (!back && riffle && !firstLeaf) from = reach(RIFFLE_HEAD / gain);
+        if (riffle) duration = lastLeaf ? RIFFLE_LEAF_MS.last : firstLeaf ? RIFFLE_LEAF_MS.first : RIFFLE_LEAF_MS.middle;
+        else duration *= to - from;
+        // Let go of with next to nothing left to travel: there is nothing to wait for.
+        if (release && share < 0.12) duration = Math.max(48, (duration * share) / 0.12);
       }
 
       if (isTurned) {
@@ -996,7 +1069,7 @@ export class FlipEngine {
       const n = Math.max(2, Math.ceil(duration / 8));
       const frames: (() => void)[] = [];
       for (let i = 0; i < n; i++) {
-        const e = ease(i / (n - 1));
+        const e = Math.min(1, ease(from + (to - from) * (i / (n - 1))) * gain);
         const bow = lift * Math.sin(Math.PI * e) * (bottom ? -1 : 1);
         const p = { x: start.x + dx * e, y: start.y + dy * e + bow };
         frames.push(() => flip.do(p));
@@ -1196,11 +1269,16 @@ export class FlipEngine {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    if (this.dead || this.drag) return;
+    if (this.dead) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (!e.isPrimary) return;
+    // A press that never became a drag and whose release was not seen (the mouse was let go
+    // outside the book) is stale: a new press replaces it.
+    if (this.drag?.active) return;
     const target = e.target as Element | null;
     if (target?.closest?.("[data-no-flip]")) return;
+    // iOS: a touch that starts at the very edge of the screen is the system's back swipe.
+    if (e.pointerType === "touch" && e.clientX < SYSTEM_EDGE) return;
 
     const r = this.block.getBoundingClientRect();
     this.swallowClick = false;
@@ -1260,7 +1338,16 @@ export class FlipEngine {
         drag.dead = true; // a vertical gesture: leave it to the page scroll
         return;
       }
-      if (this.reduced) return; // decided on release, as a swipe
+      if (this.reduced) {
+        // Decided on release, as a swipe. Hold on to the pointer so that a mouse let go beside
+        // the book still counts.
+        try {
+          if (!this.opts.mount.hasPointerCapture(e.pointerId)) this.opts.mount.setPointerCapture(e.pointerId);
+        } catch {
+          /* optional */
+        }
+        return;
+      }
       const direction: Direction = dx < 0 ? FORWARD : BACK;
       if (direction === FORWARD ? this.atEnd() : this.atStart()) {
         drag.edge = direction === FORWARD ? "next" : "prev"; // nothing to turn; decided on release
@@ -1359,7 +1446,11 @@ export class FlipEngine {
       });
       if (!started || !flip.calc) return false;
       const corner = flip.calc.getCorner();
-      from = { x: w - 1, y: corner === "top" ? 1 : h - 1 };
+      /* One page at a time, the sheet coming back is left of the spine (out of sight) for the
+         first half of its way. Start it at the spine, so it comes out under the finger at once
+         instead of after the finger has crossed half the page. */
+      const atSpine = this.mode === "single" && direction === BACK;
+      from = { x: atSpine ? 0 : w - 1, y: corner === "top" ? 1 : h - 1 };
     }
     if (!flip.calc) return false;
 
@@ -1401,7 +1492,7 @@ export class FlipEngine {
       const y = drag.corner === "bottom" ? h : 0;
       this.releaseEase = true;
       this.flip.setState("flipping");
-      this.flip.animateFlippingTo({ x: pos.x, y: pos.y }, { x: complete ? -w : w, y }, complete);
+      this.flip.animateFlippingTo({ x: pos.x, y: pos.y }, { x: complete ? -w : this.restX(drag.direction), y }, complete);
       return;
     }
 
@@ -1414,9 +1505,12 @@ export class FlipEngine {
       }
       return;
     }
-    if (drag.dead || drag.interactive) return;
+    if (drag.dead) return;
     const moved = Math.hypot(dx, dy);
 
+    /* Reduced motion: no page follows the finger, a swipe is read on release. It counts wherever
+       it starts (stamps and slots cover half of a page), and the click that would follow must
+       not also open what was under the finger. */
     if (this.reduced) {
       if (Math.abs(dx) > 36 && Math.abs(dx) > Math.abs(dy) * 1.15) {
         this.swallowClick = true;
@@ -1426,6 +1520,7 @@ export class FlipEngine {
         return;
       }
     }
+    if (drag.interactive) return;
     if (moved > (drag.pointerType === "mouse" ? SLOP.mouse : SLOP.touch)) return;
 
     // A tap or click in the outer part of a page turns it.
@@ -1437,6 +1532,9 @@ export class FlipEngine {
     if (!forward && !backward) return;
     if (p.y < 0 || p.y > this.pageHeight) return;
     if (forward ? this.atEnd() : this.atStart()) {
+      // The book is about to shut: the click of this tap must not land on what comes next.
+      this.swallowClick = true;
+      window.setTimeout(() => (this.swallowClick = false), 400);
       this.opts.onEdge?.(forward ? "next" : "prev");
       return;
     }
@@ -1478,9 +1576,17 @@ export class FlipEngine {
     this.flip.setState("flipping");
     this.flip.animateFlippingTo(
       { x: pos.x, y: pos.y },
-      { x: this.pageWidth, y: drag.corner === "bottom" ? this.pageHeight : 0 },
+      { x: this.restX(drag.direction), y: drag.corner === "bottom" ? this.pageHeight : 0 },
       false,
     );
+  }
+
+  /**
+   * Where the corner of a page that is let go goes back to. One page at a time, a sheet coming
+   * back is out of sight as soon as it is behind the spine: it need not travel on from there.
+   */
+  private restX(direction: Direction): number {
+    return this.mode === "single" && direction === BACK ? 0 : this.pageWidth;
   }
 
   /** A drag must not also count as a click on whatever is under the finger when it ends. */

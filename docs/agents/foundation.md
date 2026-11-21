@@ -1,5 +1,7 @@
 # Foundation handoff
 
+> **Updated by the polish round.** Timings, props and layout numbers below may be out of date. `docs/agents/polish.md` lists what changed and is the current reference where the two disagree.
+
 Shared types, design tokens, theme, strings, sample data, the asset pipeline and the `<Stamp />` renderer.
 Live gallery: `http://localhost:3100/lab/stamp` (all stamps, statuses and directions; use it as the visual reference).
 

@@ -12,6 +12,11 @@
  * The step is derived from the passport data, so "Replay" is simply the sample data again.
  * Every step first turns the book to the right page, then plays its moment on the page itself.
  *
+ * Timing: the button and the toast follow what is on screen, not the teardown of an overlay. Each
+ * moment reports its visible hit (the stamper's impact, the ink swap, the seal, the landing) and
+ * the demo hands the button back and drops the toast a fixed beat after it. A tap that arrives
+ * while the previous overlay is still fading is queued behind it, never lost.
+ *
  * Loading (UX-7): the closed cover is server-rendered. The inside pages render when the browser
  * is idle (or when the cover is first touched), the flip library loads at idle inside
  * PassportBook, and the three moments are imported at idle and kept in state.
@@ -24,11 +29,14 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { Header } from "@/components/chrome";
 import { vibrate } from "@/components/moments/celebrations/haptics";
+import { nudge } from "@/components/moments/stamp-press/feedback";
 import { InkSpeckles } from "@/components/moments/stamp-press/InkSpeckles";
 import { StampPressSoundToggle } from "@/components/moments/stamp-press/SoundToggle";
 import type { StatusUpgradeHandle } from "@/components/moments/StatusUpgrade";
@@ -44,9 +52,10 @@ import {
   withProvincialEarned,
   withStampStatus,
 } from "@/lib/sample-data";
+import { play, stopAllSounds } from "@/lib/sound";
 import { strings, t } from "@/lib/strings";
 import type { PassportData, Stamp } from "@/lib/types";
-import { ActionBar, type StoryStep } from "./ActionBar";
+import { ActionBar, type JumpStep, type StoryStep } from "./ActionBar";
 import { DonateTransition } from "./DonateTransition";
 import { FpsMeter } from "./FpsMeter";
 import { Notice, type NoticeData, type NoticeTone } from "./Notice";
@@ -133,7 +142,28 @@ function usePrefersReducedMotion(): boolean {
   );
 }
 
+/**
+ * The notice's blip, in seconds after the notice is asked for: React commits it a frame or two
+ * later and it then drops in on a spring, so the blip lands as it becomes readable (measured, see
+ * docs/agents/sound.md).
+ */
+const TOAST_SOUND_DELAY = 0.09;
+
 const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+/** The next painted frame (or 50 ms, when the tab is hidden and frames do not run). */
+const nextFrame = () =>
+  new Promise<void>((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, 50);
+    window.requestAnimationFrame(finish);
+  });
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -164,6 +194,43 @@ const NAV_KEYS = new Set(["ArrowLeft", "ArrowRight", "PageUp", "PageDown", "Home
 /** The square box that holds a slot's stamp on the page that is lying open. */
 function slotBox(root: HTMLElement | null, slotId: string): HTMLElement | null {
   return root?.querySelector<HTMLElement>(`.ipb__pages [data-slot-id="${slotId}"] .ipp-slot__stamp`) ?? null;
+}
+
+/**
+ * Width of a slot's stamp box in px, whether or not its page is showing. 0 when unknown.
+ * The flip library does not lay out pages that are not showing. Their slots are sized in units of
+ * the page width (`--slot` units of width / 360, see content.css), so a page that is laid out
+ * gives the answer. Only used to prepare the stamper early: the press itself measures the slot.
+ */
+function slotSize(root: HTMLElement | null, slotId: string): number {
+  const box = slotBox(root, slotId);
+  if (!box || !root) return 0;
+  if (box.offsetWidth > 0) return Math.round(box.offsetWidth);
+  const units = parseFloat(box.closest<HTMLElement>(".ipp-slot")?.style.getPropertyValue("--slot") ?? "");
+  if (!(units > 0)) return 0;
+  for (const canvas of root.querySelectorAll<HTMLElement>(".ipb__pages .ipp-canvas")) {
+    if (canvas.offsetWidth > 0) return Math.round((canvas.offsetWidth * units) / 360);
+  }
+  return 0;
+}
+
+/** Attribute of the book's root element, followed without re-rendering the demo. */
+function useBookAttr(root: RefObject<HTMLElement | null>, name: string): string | null {
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const el = root.current?.querySelector(".ipb");
+      if (!el || typeof MutationObserver === "undefined") return () => {};
+      const observer = new MutationObserver(onChange);
+      observer.observe(el, { attributes: true, attributeFilter: [name] });
+      return () => observer.disconnect();
+    },
+    [root, name],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => root.current?.querySelector(".ipb")?.getAttribute(name) ?? null,
+    () => null,
+  );
 }
 
 function storyStep(passport: PassportData): StoryStep {
@@ -216,34 +283,78 @@ function createPageStore(): PageStore {
 interface HintProps {
   store: PageStore;
   passport: PassportData;
+  /** The wrapper the book lives in: its side and layout are read from the book's root element. */
+  root: RefObject<HTMLElement | null>;
   open: boolean;
   quiet: boolean;
-  /** Reduced motion is on and the book has not been opened yet: say so once. */
-  reducedNote: boolean;
+  /**
+   * Reduced motion is on and the book has not been opened yet: say so, and offer the full motion
+   * once (this page is a motion demo).
+   */
+  motionChoice: boolean;
+  onFullMotion(): void;
   pulse: boolean;
   pageCount: number;
 }
 
-function Hint({ store, passport, open, quiet, reducedNote, pulse, pageCount }: HintProps) {
+/* Two short lines inside the height the layout reserves for one. demo.css styles `.ipd-hint__btn`
+   beyond this reset. */
+const HINT_CHOICE: CSSProperties = { flexDirection: "column", gap: 3, lineHeight: 1.05, letterSpacing: "0.08em" };
+const HINT_BUTTON: CSSProperties = {
+  margin: "-7px -12px",
+  padding: "7px 12px",
+  border: 0,
+  background: "none",
+  font: "inherit",
+  letterSpacing: "inherit",
+  textTransform: "inherit",
+  color: "inherit",
+  textDecoration: "underline",
+  textUnderlineOffset: 3,
+  cursor: "pointer",
+  touchAction: "manipulation",
+};
+
+function Hint({ store, passport, root, open, quiet, motionChoice, onFullMotion, pulse, pageCount }: HintProps) {
   const page = useSyncExternalStore(store.subscribe, store.get, () => 0);
+  const side = useBookAttr(root, "data-side");
+  const spread = useBookAttr(root, "data-mode") === "double";
+
+  // The pages lying open: one, or the pair of a spread.
+  const first = spread ? page - (page % 2) : page;
+  const last = spread ? Math.min(first + 1, pageCount - 1) : page;
+
   let hint: string;
-  if (reducedNote) hint = D.reducedOn;
-  else if (!open) hint = D.hintOpen;
+  if (motionChoice) hint = D.reducedOn;
+  else if (!open) hint = side === "back" ? D.hintBack : D.hintOpen;
   else {
-    // What the page lying open invites: turning on, a stamp to tap, or an empty slot to stamp.
-    const islandId = Object.keys(PAGE_MAP.islands).find((id) => PAGE_MAP.islands[id] === page);
-    const slots = islandId ? passport.slots.filter((slot) => slot.islandId === islandId) : [];
-    if (slots.some((slot) => !slot.stamp)) hint = D.hintEmpty;
-    else if (slots.length > 0 || (page === PAGE_MAP.provincial && passport.provincial.earned)) hint = D.hintStamp;
+    // What the open pages invite: a stamp to tap, an empty slot to stamp, or turning on.
+    const islandIds = Object.keys(PAGE_MAP.islands).filter((id) => PAGE_MAP.islands[id] >= first && PAGE_MAP.islands[id] <= last);
+    const slots = passport.slots.filter((slot) => islandIds.includes(slot.islandId));
+    const provincialShown = PAGE_MAP.provincial >= first && PAGE_MAP.provincial <= last;
+    if (provincialShown && passport.provincial.earned) hint = D.hintStamp;
+    else if (slots.some((slot) => !slot.stamp)) hint = D.hintEmpty;
+    else if (slots.length > 0) hint = D.hintStamp;
     else hint = D.hintSwipe;
   }
   return (
     <p className="ipd-hint" aria-hidden={quiet || undefined} data-quiet={quiet ? "" : undefined}>
-      <span key={hint} className="ipd-hint__text">
-        {!open && pulse && <i className="ipd-hint__pulse" aria-hidden="true" />}
+      <span key={hint} className="ipd-hint__text" style={motionChoice ? HINT_CHOICE : undefined}>
+        {!open && !motionChoice && pulse && <i className="ipd-hint__pulse" aria-hidden="true" />}
         {hint}
+        {motionChoice && !quiet && (
+          <button type="button" className="ipd-hint__btn" style={HINT_BUTTON} onClick={onFullMotion}>
+            {D.playFull}
+          </button>
+        )}
       </span>
-      {open && <span className="ipd-hint__page">{t(D.pageOf, { page: page + 1, total: pageCount })}</span>}
+      {open && (
+        <span className="ipd-hint__page">
+          {last > first
+            ? t(D.pagesOf, { from: first + 1, to: last + 1, total: pageCount })
+            : t(D.pageOf, { page: page + 1, total: pageCount })}
+        </span>
+      )}
     </p>
   );
 }
@@ -254,24 +365,33 @@ function Hint({ store, passport, open, quiet, reducedNote, pulse, pageCount }: H
 
 export function Demo() {
   const { tokens } = useTheme();
-  const reduced = usePrefersReducedMotion();
+  const systemReduced = usePrefersReducedMotion();
+  /** Reduce Motion is on, and the visitor asked to see the full motion anyway. Never persisted. */
+  const [fullMotion, setFullMotion] = useState(false);
+  const reduced = systemReduced && !fullMotion;
+  /** Handed to everything that reads the device setting itself: undefined leaves that untouched. */
+  const motionOverride = fullMotion ? false : undefined;
 
   const [passport, setPassport] = useState<PassportData>(SAMPLE_PASSPORT);
   const [bookState, setBookState] = useState<BookState>("closed");
   /** The cover's foil follows the pointer only while the book lies closed. Changed at rest, never mid-swing. */
   const [coverIdle, setCoverIdle] = useState(true);
   const [busy, setBusyState] = useState<Busy>(null);
+  /** Collect: the book still has to open or turn to the page before the stamper appears. */
+  const [opening, setOpening] = useState(false);
+  /** Verified count shown on the button between the seal landing and the award opening. */
+  const [bridge, setBridge] = useState<number | null>(null);
   const [press, setPress] = useState<PressRun | null>(null);
   const [inline, setInline] = useState<InlineRun | null>(null);
   const [awardOpen, setAwardOpen] = useState(false);
   const [fresh, setFresh] = useState<string[]>([]);
   const [notice, setNotice] = useState<NoticeData | null>(null);
-  const [sound, setSound] = useState(false);
   const [moments, setMoments] = useState<Moments | null>(null);
   /** Inside pages are rendered (after idle, or as soon as the cover is touched). */
   const [live, setLive] = useState(false);
   const [wide, setWide] = useState(false);
   const [started, setStarted] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [debug, setDebug] = useState(false);
 
   const [pageStore] = useState(createPageStore);
@@ -280,8 +400,12 @@ export function Demo() {
   const floatRef = useRef<HTMLDivElement>(null);
   const upgradeRef = useRef<StatusUpgradeHandle>(null);
 
-  const passportRef = useRef(passport);
-  passportRef.current = passport;
+  /**
+   * The passport data as the story knows it, updated the moment something happens. The `passport`
+   * state follows it, often as a transition in the middle of an animation, so decisions (which
+   * step is next, is this slot empty) are taken from here and never from a render that is behind.
+   */
+  const dataRef = useRef(passport);
   const busyRef = useRef<Busy>(null);
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
@@ -291,26 +415,118 @@ export function Demo() {
   const noticeId = useRef(0);
   const timers = useRef<number[]>([]);
   const closeStampRef = useRef<() => void>(() => {});
+  const onActionRef = useRef<() => void>(() => {});
   const flipWaiter = useRef<{ page: number; resolve(): void } | null>(null);
   const stateWaiter = useRef<{ state: BookState; resolve(): void } | null>(null);
+  /** Calls to ensureAt run one after another. */
+  const navChain = useRef<Promise<void>>(Promise.resolve());
+  /** Moment overlays that are still mounted, and whoever is waiting for them to go. */
+  const overlays = useRef({ press: false, inline: false, award: false });
+  const overlayWaiters = useRef<Array<() => void>>([]);
+  /** Hand-backs (button, toast) scheduled from a moment's impact and not yet run. */
+  const beats = useRef<Array<() => void>>([]);
+  const upgradeImpactAt = useRef(0);
+  const awardTimer = useRef(0);
+  const awardRun = useRef<{ travel: Promise<void> | null; landed: boolean; arrived: boolean } | null>(null);
 
   const setBusy = useCallback((next: Busy) => {
     busyRef.current = next;
     setBusyState(next);
   }, []);
+  /** A moment hands the button back, unless something newer has taken it since. */
+  const release = useCallback(
+    (owner: Exclude<Busy, null>) => {
+      if (busyRef.current === owner) setBusy(null);
+    },
+    [setBusy],
+  );
 
   const say = useCallback((tone: NoticeTone, title: string, body: string, duration?: number) => {
     setNotice({ id: ++noticeId.current, tone, title, body, duration });
+    // One soft blip as the notice drops in. Not after the seal or the award: those notices follow
+    // the chime and the landing, which are still ringing, and a blip on top of them is clutter.
+    if (tone !== "verified" && tone !== "provincial") play.toast({ delay: TOAST_SOUND_DELAY });
   }, []);
   const dismissNotice = useCallback(() => setNotice(null), []);
 
-  const later = useCallback((ms: number, run: () => void) => {
+  const later = useCallback((ms: number, run: () => void): number => {
     const id = window.setTimeout(() => {
       timers.current = timers.current.filter((t) => t !== id);
       run();
     }, ms);
     timers.current.push(id);
+    return id;
   }, []);
+  const cancelLater = useCallback((id: number) => {
+    window.clearTimeout(id);
+    timers.current = timers.current.filter((t) => t !== id);
+  }, []);
+
+  /**
+   * Run `fn` once, `ms` after a moment's impact, so the button and the toast read as the echo of
+   * the hit. If the moment ends first (a skip, a direction switch), flushBeats() runs it then.
+   */
+  const beat = useCallback(
+    (ms: number, fn: () => void) => {
+      let done = false;
+      const run = () => {
+        if (done) return;
+        done = true;
+        beats.current = beats.current.filter((b) => b !== run);
+        fn();
+      };
+      beats.current.push(run);
+      later(ms, run);
+    },
+    [later],
+  );
+  const flushBeats = useCallback(() => {
+    const pending = beats.current;
+    beats.current = [];
+    pending.forEach((run) => run());
+  }, []);
+
+  /** Resolves when no stamping or in-slot overlay is mounted any more (900 ms at most). */
+  const overlayGone = useCallback(() => {
+    return new Promise<void>((resolve) => {
+      const o = overlays.current;
+      if (!o.press && !o.inline && !o.award) {
+        resolve();
+        return;
+      }
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve();
+      };
+      const timer = window.setTimeout(finish, 900);
+      overlayWaiters.current.push(finish);
+    });
+  }, []);
+  const overlayEnded = useCallback((which: "press" | "inline" | "award") => {
+    overlays.current[which] = false;
+    const waiting = overlayWaiters.current;
+    overlayWaiters.current = [];
+    waiting.forEach((resolve) => resolve());
+  }, []);
+
+  /** Change the passport data. A transition unless `urgent`: most changes land mid-animation. */
+  const apply = useCallback((next: PassportData, opts: { urgent?: boolean; fresh?: (list: string[]) => string[] } = {}) => {
+    dataRef.current = next;
+    const commit = () => {
+      setPassport(next);
+      if (opts.fresh) setFresh(opts.fresh);
+    };
+    if (opts.urgent) commit();
+    else startTransition(commit);
+  }, []);
+  /**
+   * Make the rendered passport catch up with the data now, if a transition is still on its way.
+   * Called when the button is handed back, so the step it offers is always the real one.
+   */
+  const settle = useCallback(() => setPassport(dataRef.current), []);
 
   /* --------------------------- loading --------------------------- */
 
@@ -322,15 +538,34 @@ export function Demo() {
   }, []);
 
   useEffect(() => {
-    const cancelPages = whenIdle(() => startTransition(() => setLive(true)), 900);
+    setHydrated(true);
+    const cancelPages = whenIdle(() => startTransition(() => setLive(true)), 300);
     const cancelMoments = whenIdle(warm, 2500);
     const debugging = /[?&]debug\b/.test(window.location.search);
     setDebug(debugging);
     // For checking on a device and for the test scripts: the book handle, only with ?debug.
     if (debugging) (window as unknown as { __ipBook?: () => PassportBookLibHandle | null }).__ipBook = () => book.current;
+
+    // A tap made before the page was interactive (remembered by the script in layout.tsx) is
+    // answered now. One task later, so the book has finished its own first effects.
+    const w = window as unknown as { __ipEarly?: string };
+    const early = w.__ipEarly;
+    const replayEarly =
+      early === "cta" || early === "cover"
+        ? window.setTimeout(() => {
+            w.__ipEarly = undefined;
+            if (early === "cta") onActionRef.current();
+            else {
+              setLive(true);
+              warm();
+              book.current?.open();
+            }
+          }, 0)
+        : 0;
     return () => {
       cancelPages();
       cancelMoments();
+      window.clearTimeout(replayEarly);
     };
   }, [warm]);
 
@@ -338,6 +573,8 @@ export function Demo() {
     () => () => {
       timers.current.forEach((id) => window.clearTimeout(id));
       timers.current = [];
+      // Leaving the page: nothing goes on ringing over the next one.
+      stopAllSounds();
     },
     [],
   );
@@ -351,15 +588,34 @@ export function Demo() {
     return () => observer.disconnect();
   }, []);
 
-  // The die face of the stamper is tinted ahead of time, so the first press starts complete.
+  // The stamper is prepared ahead of time, so the first press starts complete and its bake does
+  // not land just before the stamper appears: the artwork as soon as the moments are loaded, the
+  // engraved tool at idle once the pages are laid out and the slot's real size is known.
   useEffect(() => {
     if (!moments) return;
-    moments.preloadStampPress(stampForSlot(STORY.slotId, "discovery", STORY.today), tokens);
-  }, [moments, tokens]);
+    const stamp = stampForSlot(STORY.slotId, "discovery", STORY.today);
+    moments.preloadStampPress(stamp, tokens);
+    if (!live) return;
+    return whenIdle(() => {
+      const size = slotSize(floatRef.current, STORY.slotId);
+      if (size > 0) moments.preloadStampPress(stamp, tokens, size);
+    }, 1200);
+  }, [moments, tokens, live, wide]);
 
   /* ----------------------- book navigation ----------------------- */
 
   const isSpread = useCallback(() => floatRef.current?.querySelector(".ipb")?.getAttribute("data-mode") === "double", []);
+
+  /** The book lies open on `target` (or on the spread that holds it). */
+  const onPage = useCallback(
+    (target: number) => {
+      const b = book.current;
+      if (!b || b.getState() !== "open") return false;
+      const here = b.getPage();
+      return here === target || (isSpread() && Math.floor(here / 2) === Math.floor(target / 2));
+    },
+    [isSpread],
+  );
 
   const waitForState = useCallback((state: BookState, timeout: number) => {
     return new Promise<void>((resolve) => {
@@ -380,21 +636,19 @@ export function Demo() {
     });
   }, []);
 
-  /** Open the book if needed and turn to `target`. Resolves when the page has landed and is at rest. */
-  const ensureAt = useCallback(
+  const travel = useCallback(
     async (target: number) => {
       const b = book.current;
-      if (!b || target < 0) return;
+      if (!b || !(target >= 0)) return;
       setLive(true);
       if (b.getState() !== "open") {
         b.open();
+        // The book reports "open" when its pages can be turned; nothing is added on top of that.
         await waitForState("open", 3600);
-        await wait(reducedRef.current ? 80 : 240);
+        if (reducedRef.current) await wait(80);
       }
-      const here = b.getPage();
-      const same = here === target || (isSpread() && Math.floor(here / 2) === Math.floor(target / 2));
-      if (same) {
-        await wait(60);
+      if (onPage(target)) {
+        await nextFrame();
         return;
       }
       await new Promise<void>((resolve) => {
@@ -410,10 +664,22 @@ export function Demo() {
         flipWaiter.current = { page: target, resolve: finish };
         b.flipThrough(target);
       });
-      // A landed page is handed back to the reader a moment after the flip ends.
-      await wait(reducedRef.current ? 60 : 150);
+      if (reducedRef.current) await wait(40);
     },
-    [isSpread, waitForState],
+    [onPage, waitForState],
+  );
+
+  /**
+   * Open the book if needed and turn to `target`. Resolves when the page has landed. Calls queue
+   * behind one another, so two requests never turn the book at the same time.
+   */
+  const ensureAt = useCallback(
+    (target: number) => {
+      const run = navChain.current.then(() => travel(target));
+      navChain.current = run.catch(() => {});
+      return run;
+    },
+    [travel],
   );
 
   const onFlip = useCallback(
@@ -446,124 +712,213 @@ export function Demo() {
     [storySlot],
   );
 
+  /** The slot holds a stamp from here on. Idempotent. */
+  const collected = useCallback(
+    (slotId: string, urgent = false) => {
+      const addFresh = (list: string[]) => (list.includes(slotId) ? list : [...list, slotId]);
+      const data = dataRef.current;
+      const next = findSlot(data, slotId)?.stamp ? data : withStampStatus(data, slotId, "discovery", STORY.today);
+      apply(next, { urgent, fresh: addFresh });
+    },
+    [apply],
+  );
+
+  /** The story stamp has this status from here on. Idempotent. */
+  const storyStatus = useCallback(
+    (status: "pending" | "verified", urgent = false) => {
+      const data = dataRef.current;
+      const next = findSlot(data, STORY.slotId)?.stamp?.status === status ? data : withStampStatus(data, STORY.slotId, status);
+      apply(next, { urgent });
+    },
+    [apply],
+  );
+
   /** Step 1, and also any empty slot the reader taps: the stamp is pressed onto the page. */
   const collect = useCallback(
     async (slotId: string) => {
       if (busyRef.current) return;
-      const slot = findSlot(passportRef.current, slotId);
+      const slot = findSlot(dataRef.current, slotId);
       if (!slot || slot.stamp) return;
+      const page = PAGE_MAP.forSlot(slotId);
+      closeStampRef.current();
+      setOpening(!onPage(page));
       setBusy("collect");
       dismissNotice();
       const stamp = stampForSlot(slotId, "discovery", STORY.today);
-      const commit = () => {
-        setPassport((p) => withStampStatus(p, slotId, "discovery", STORY.today));
-        setFresh((list) => (list.includes(slotId) ? list : [...list, slotId]));
-      };
+      const stampCollected = () =>
+        say("discovery", strings.moments.stampEarnedTitle, t(strings.moments.stampEarnedBody, { title: stamp.title, island: stamp.island }));
       try {
-        const [m] = await Promise.all([loadMoments(), ensureAt(PAGE_MAP.forSlot(slotId))]);
+        await overlayGone();
+        if (findSlot(dataRef.current, slotId)?.stamp) {
+          release("collect");
+          return;
+        }
+        // The stamper is baked for the slot's size while the book is still on its way.
+        const known = slotSize(floatRef.current, slotId);
+        const loading = loadMoments().then((m) => {
+          if (known > 0) m.preloadStampPress(stamp, tokensRef.current, known);
+          return m;
+        });
+        const [m] = await Promise.all([loading, ensureAt(page)]);
         setMoments((prev) => prev ?? m);
         const target = slotBox(floatRef.current, slotId);
         if (!target) throw new Error("slot not on screen");
-        m.preloadStampPress(stamp, tokensRef.current, Math.round(target.getBoundingClientRect().width));
-        await wait(reducedRef.current ? 40 : 200);
+        const size = Math.round(target.getBoundingClientRect().width);
+        if (size !== known) m.preloadStampPress(stamp, tokensRef.current, size);
+        if (reducedRef.current) await wait(40);
+        overlays.current.press = true;
         setPress({ run: ++runId.current, slotId, stamp, target });
       } catch {
         // The moment could not load or the slot is not on screen: the stamp still arrives.
-        commit();
-        say("discovery", strings.moments.stampEarnedTitle, t(strings.moments.stampEarnedBody, { title: stamp.title, island: stamp.island }));
-        setBusy(null);
+        collected(slotId, true);
+        stampCollected();
+        release("collect");
       }
     },
-    [dismissNotice, ensureAt, say, setBusy],
+    [collected, dismissNotice, ensureAt, onPage, overlayGone, release, say, setBusy],
   );
 
   /* The data changes below land in the middle of an animation. They are transitions, so React
      renders the pages they touch in slices between frames instead of in one long task. */
-  const onPressImpact = useCallback((slotId: string) => {
-    startTransition(() => {
-      setPassport((p) => withStampStatus(p, slotId, "discovery", STORY.today));
-      setFresh((list) => (list.includes(slotId) ? list : [...list, slotId]));
-    });
-  }, []);
+  const onPressImpact = useCallback(
+    (stamp: Stamp) => {
+      collected(stamp.id);
+      // The echo of the hit: the toast drops in and the button offers the next step while the
+      // stamper is still lifting away.
+      beat(200, () => {
+        settle();
+        say("discovery", strings.moments.stampEarnedTitle, t(strings.moments.stampEarnedBody, { title: stamp.title, island: stamp.island }));
+        release("collect");
+      });
+    },
+    [beat, collected, release, say, settle],
+  );
 
   const onPressComplete = useCallback(
     (stamp: Stamp) => {
-      // Idempotent: makes sure the stamp is in the data even if the transition above has not committed.
-      setPassport((p) => (findSlot(p, stamp.id)?.stamp ? p : withStampStatus(p, stamp.id, "discovery", STORY.today)));
+      // Makes sure the stamp is on the page before the overlay goes, even if the transition has not committed.
+      collected(stamp.id, true);
       setPress(null);
-      say("discovery", strings.moments.stampEarnedTitle, t(strings.moments.stampEarnedBody, { title: stamp.title, island: stamp.island }));
-      setBusy(null);
+      flushBeats();
+      release("collect");
+      overlayEnded("press");
     },
-    [say, setBusy],
+    [collected, flushBeats, overlayEnded, release],
   );
 
   /** Steps 2 and 3 play inside the slot itself. */
   const startInline = useCallback(
     async (kind: "donate" | "confirm") => {
       if (busyRef.current) return;
-      const stamp = findSlot(passportRef.current, STORY.slotId)?.stamp;
-      if (!stamp || stamp.status !== (kind === "donate" ? "discovery" : "pending")) return;
+      const from = kind === "donate" ? "discovery" : "pending";
+      if (findSlot(dataRef.current, STORY.slotId)?.stamp?.status !== from) return;
+      closeStampRef.current();
       setBusy(kind);
       dismissNotice();
       try {
+        // A tap made while the last moment is still handing over waits for it, then plays.
+        await overlayGone();
+        const stamp = findSlot(dataRef.current, STORY.slotId)?.stamp;
+        if (!stamp || stamp.status !== from) {
+          release(kind);
+          return;
+        }
         const [m] = await Promise.all([loadMoments(), ensureAt(PAGE_MAP.forSlot(STORY.slotId))]);
         setMoments((prev) => prev ?? m);
-        await wait(reducedRef.current ? 40 : 160);
+        if (reducedRef.current) await wait(40);
+        overlays.current.inline = true;
         setInline({ run: ++runId.current, kind, slotId: STORY.slotId, stamp });
       } catch {
-        setPassport((p) => withStampStatus(p, STORY.slotId, kind === "donate" ? "pending" : "verified"));
-        setBusy(null);
+        storyStatus(kind === "donate" ? "pending" : "verified", true);
+        release(kind);
       }
     },
-    [dismissNotice, ensureAt, setBusy],
+    [dismissNotice, ensureAt, overlayGone, release, setBusy, storyStatus],
   );
 
-  const startAward = useCallback(() => {
+  const startAward = useCallback(async () => {
     if (busyRef.current && busyRef.current !== "award") return;
+    cancelLater(awardTimer.current);
+    closeStampRef.current();
     setBusy("award");
     dismissNotice();
-    void loadMoments().then(
-      (m) => {
-        setMoments((prev) => prev ?? m);
-        setAwardOpen(true);
-      },
-      () => {
-        setPassport((p) => withProvincialEarned(p, STORY.today));
-        setBusy(null);
-      },
-    );
-  }, [dismissNotice, setBusy]);
+    try {
+      await overlayGone();
+      const m = await loadMoments();
+      setMoments((prev) => prev ?? m);
+      awardRun.current = { travel: null, landed: false, arrived: false };
+      overlays.current.award = true;
+      setBridge(null);
+      // Mounting the dialog is a long render on a slow phone; as a transition it is cut into slices.
+      startTransition(() => setAwardOpen(true));
+    } catch {
+      setBridge(null);
+      apply(withProvincialEarned(dataRef.current, STORY.today), { urgent: true });
+      release("award");
+    }
+  }, [apply, cancelLater, dismissNotice, overlayGone, release, setBusy]);
 
   const onDonateSwap = useCallback(() => {
     vibrate([8]);
-    startTransition(() => setPassport((p) => withStampStatus(p, STORY.slotId, "pending")));
-  }, []);
+    storyStatus("pending");
+    const charity = findSlot(dataRef.current, STORY.slotId)?.stamp?.charity ?? "";
+    beat(150, () => {
+      settle();
+      say("pending", strings.moments.pendingTitle, t(D.toast.pendingBody, { charity }), 8500);
+      release("donate");
+    });
+  }, [beat, release, say, settle, storyStatus]);
 
   const onDonateDone = useCallback(() => {
-    const stamp = findSlot(passportRef.current, STORY.slotId)?.stamp;
-    setPassport((p) => (findSlot(p, STORY.slotId)?.stamp?.status === "pending" ? p : withStampStatus(p, STORY.slotId, "pending")));
+    storyStatus("pending", true);
     setInline(null);
-    say("pending", strings.moments.pendingTitle, t(D.toast.pendingBody, { charity: stamp?.charity ?? "" }), 8500);
-    setBusy(null);
-  }, [say, setBusy]);
+    flushBeats();
+    release("donate");
+    overlayEnded("inline");
+  }, [flushBeats, overlayEnded, release, storyStatus]);
 
   const onUpgradeImpact = useCallback(() => {
-    startTransition(() => setPassport((p) => withStampStatus(p, STORY.slotId, "verified")));
-  }, []);
+    upgradeImpactAt.current = performance.now();
+    // The book takes the seal, a touch lighter than it takes the stamper.
+    if (!reducedRef.current) nudge(floatRef.current, 0.7);
+    storyStatus("verified");
+    const next = dataRef.current;
+    const stamp = findSlot(next, STORY.slotId)?.stamp;
+    beat(120, () =>
+      say("verified", strings.moments.verifiedTitle, t(strings.moments.verifiedBody, { charity: stamp?.charity ?? "", island: stamp?.island ?? "" }), 3600),
+    );
+    if (provincialUnlocked(next) && !next.provincial.earned) {
+      // STM-4: awarded automatically once the threshold is reached. The button counts the
+      // Verified stamps while the seal settles and the toast is read, then the award opens.
+      beat(250, () => {
+        if (busyRef.current !== "confirm") return;
+        settle();
+        setBridge(getProgress(dataRef.current).verified);
+        setBusy("award");
+      });
+      awardTimer.current = later(reducedRef.current ? 700 : 1900, () => void startAward());
+    } else {
+      beat(250, () => {
+        settle();
+        release("confirm");
+      });
+    }
+  }, [beat, later, release, say, setBusy, settle, startAward, storyStatus]);
 
   const onUpgradeComplete = useCallback(() => {
-    setPassport((p) => (findSlot(p, STORY.slotId)?.stamp?.status === "verified" ? p : withStampStatus(p, STORY.slotId, "verified")));
-    setInline(null);
-    // onImpact always fires first, but the state update it made may not have rendered yet.
-    const next = withStampStatus(passportRef.current, STORY.slotId, "verified");
-    const stamp = findSlot(next, STORY.slotId)?.stamp;
-    say("verified", strings.moments.verifiedTitle, t(strings.moments.verifiedBody, { charity: stamp?.charity ?? "", island: stamp?.island ?? "" }), 3600);
-    if (provincialUnlocked(next) && !next.provincial.earned) {
-      // STM-4: awarded automatically once the threshold is reached.
-      setBusy("award");
-      later(reducedRef.current ? 500 : 1150, startAward);
-    } else setBusy(null);
-  }, [later, say, setBusy, startAward]);
+    const wasPlaying = overlays.current.inline;
+    // Unmounting the overlay re-renders the page under it: a transition, so the settle keeps its frames.
+    storyStatus("verified");
+    startTransition(() => setInline(null));
+    flushBeats();
+    release("confirm");
+    overlayEnded("inline");
+    // Skipped (the moment ended well before its seal would have landed): the award follows sooner.
+    if (wasPlaying && !reducedRef.current && busyRef.current === "award" && performance.now() - upgradeImpactAt.current < 500) {
+      cancelLater(awardTimer.current);
+      awardTimer.current = later(900, () => void startAward());
+    }
+  }, [cancelLater, flushBeats, later, overlayEnded, release, startAward, storyStatus]);
 
   const awardTarget = useCallback((): HTMLElement | DOMRect | null => {
     const slot = floatRef.current?.querySelector<HTMLElement>(".ipb__pages [data-provincial-slot]");
@@ -576,42 +931,117 @@ export function Demo() {
     return new DOMRect(r.left + (r.width - size) / 2, r.top + (r.height - size) / 2, size, size);
   }, []);
 
-  const onAwardAdd = useCallback(() => ensureAt(PAGE_MAP.provincial), [ensureAt]);
-  const onAwardLanded = useCallback(() => setPassport((p) => withProvincialEarned(p, STORY.today)), []);
+  const onAwardAdd = useCallback(() => {
+    const going = ensureAt(PAGE_MAP.provincial);
+    if (awardRun.current) awardRun.current.travel = going;
+    return going;
+  }, [ensureAt]);
+
+  const onAwardLanded = useCallback(() => {
+    // A transition: this commit used to be one long frame exactly on the landing.
+    if (!dataRef.current.provincial.earned) apply(withProvincialEarned(dataRef.current, STORY.today));
+    const run = awardRun.current;
+    if (!run || run.landed) return;
+    run.landed = true;
+    void (async () => {
+      try {
+        // After a skip the book is still turning: the button and the toast wait for the page.
+        await run.travel;
+        // The page is not showing (the phone was turned mid-flight, say): go there first.
+        if (!onPage(PAGE_MAP.provincial)) await ensureAt(PAGE_MAP.provincial);
+      } catch {
+        /* the book could not be turned: still hand back */
+      }
+      run.arrived = true;
+      beat(200, () => {
+        settle();
+        release("award");
+      });
+      beat(250, () => {
+        const p = dataRef.current;
+        say(
+          "provincial",
+          strings.moments.provincialTitle,
+          t(strings.moments.provincialBody, { n: getProgress(p).verified, province: p.province }),
+          6000,
+        );
+      });
+    })();
+  }, [apply, beat, ensureAt, onPage, release, say, settle]);
+
   const onAwardComplete = useCallback(() => {
     setAwardOpen(false);
-    const p = passportRef.current;
-    say(
-      "provincial",
-      strings.moments.provincialTitle,
-      t(strings.moments.provincialBody, { n: getProgress(p).verified, province: p.province }),
-      6000,
-    );
-    setBusy(null);
-  }, [say, setBusy]);
+    const run = awardRun.current;
+    // Normally the beats have run by now. If the page has not arrived yet they are armed when it does.
+    if (!run || run.arrived) {
+      flushBeats();
+      release("award");
+    }
+    overlayEnded("award");
+  }, [flushBeats, overlayEnded, release]);
 
   const replay = useCallback(async () => {
     if (busyRef.current) return;
-    setBusy("reset");
-    dismissNotice();
+    // Whatever is still ringing (a chime, the award's sparkles, a page in the air) stops here.
+    stopAllSounds();
     closeStampRef.current();
+    dismissNotice();
     const b = book.current;
-    if (b && b.getState() !== "closed") {
-      b.close();
-      await waitForState("closed", 2200);
+    const o = overlays.current;
+    if ((b && b.getState() !== "closed") || o.press || o.inline || o.award) {
+      setBusy("reset");
+      await overlayGone();
+      await navChain.current;
+      if (b && b.getState() !== "closed") {
+        b.close();
+        await waitForState("closed", 2200);
+      }
     }
+    // Only now, with the book shut: face up, first page ready under the cover.
     b?.turnOver("front");
     b?.goTo(0);
     pageStore.set(0);
-    setPassport(SAMPLE_PASSPORT);
-    setFresh([]);
+    dataRef.current = SAMPLE_PASSPORT;
+    busyRef.current = null;
     say("neutral", D.toast.reset, D.toast.resetBody, 2600);
-    setBusy(null);
-  }, [dismissNotice, pageStore, say, setBusy, waitForState]);
+    // The pages are hidden under the cover, which is still settling: nothing here is urgent, and
+    // the button changes once, with the data.
+    startTransition(() => {
+      setBusyState(null);
+      setBridge(null);
+      setPassport(SAMPLE_PASSPORT);
+      setFresh([]);
+    });
+  }, [dismissNotice, overlayGone, pageStore, say, setBusy, waitForState]);
+
+  /** A step in the bar was tapped: the sample data as it is at the start of that step. Data only. */
+  const jump = useCallback(
+    async (to: JumpStep) => {
+      if (busyRef.current) return;
+      // The story is put somewhere else: the last moment's sound does not carry over.
+      stopAllSounds();
+      closeStampRef.current();
+      dismissNotice();
+      const o = overlays.current;
+      if (o.press || o.inline || o.award) {
+        // The last moment is still handing over (half a second at most): hold the story, quietly.
+        busyRef.current = "reset";
+        await overlayGone();
+        busyRef.current = null;
+      }
+      const status = to === "donate" ? "discovery" : to === "confirm" ? "pending" : "verified";
+      const next = to === "collect" ? SAMPLE_PASSPORT : withStampStatus(SAMPLE_PASSPORT, STORY.slotId, status, STORY.today);
+      setBridge(null);
+      apply(next, { urgent: true, fresh: () => (to === "collect" ? [] : [STORY.slotId]) });
+      void ensureAt(PAGE_MAP.forSlot(STORY.slotId));
+    },
+    [apply, dismissNotice, ensureAt, overlayGone],
+  );
 
   const onAction = useCallback(() => {
     if (busyRef.current) return;
-    switch (storyStep(passportRef.current)) {
+    closeStampRef.current();
+    switch (storyStep(dataRef.current)) {
       case "collect":
         void collect(STORY.slotId);
         break;
@@ -622,12 +1052,13 @@ export function Demo() {
         void startInline("confirm");
         break;
       case "award":
-        startAward();
+        void startAward();
         break;
       default:
         void replay();
     }
   }, [collect, replay, startAward, startInline]);
+  onActionRef.current = onAction;
 
   /* --------------------------- content --------------------------- */
 
@@ -650,7 +1081,17 @@ export function Demo() {
     const { kind, run, stamp } = inline;
     if (kind === "donate") {
       return function renderDonate(px: number, detail: "full" | "auto") {
-        return <DonateTransition key={run} stamp={stamp} size={px} detail={detail} onSwap={onDonateSwap} onDone={onDonateDone} />;
+        return (
+          <DonateTransition
+            key={run}
+            stamp={stamp}
+            size={px}
+            detail={detail}
+            reduced={motionOverride}
+            onSwap={onDonateSwap}
+            onDone={onDonateDone}
+          />
+        );
       };
     }
     return function renderUpgrade(px: number, detail: "full" | "auto") {
@@ -663,13 +1104,14 @@ export function Demo() {
           detail={detail}
           label={false}
           autoPlay
-          delay={140}
+          delay={0}
+          reducedMotion={motionOverride}
           onImpact={onUpgradeImpact}
           onComplete={onUpgradeComplete}
         />
       );
     };
-  }, [inline, moments, onDonateDone, onDonateSwap, onUpgradeComplete, onUpgradeImpact]);
+  }, [inline, moments, motionOverride, onDonateDone, onDonateSwap, onUpgradeComplete, onUpgradeImpact]);
 
   const slotOverrides = useMemo(() => {
     const overrides: Record<string, SlotOverride> = {};
@@ -682,6 +1124,24 @@ export function Demo() {
   }, [fresh, passport, inline, inlineRender, fleckFor]);
 
   const onEmptySlotSelect = useCallback((slot: { id: string }) => void collect(slot.id), [collect]);
+  /** The map hand-off: an island tapped on the Province page riffles the passport to its page. */
+  const onIslandSelect = useCallback(
+    (islandId: string) => {
+      const page = PAGE_MAP.islands[islandId];
+      if (busyRef.current || typeof page !== "number") return;
+      const from = document.activeElement;
+      const inBook = !!from && !!floatRef.current?.contains(from);
+      void ensureAt(page).then(() => {
+        // The row that was activated lies on a page that has been turned away. Keyboard focus
+        // stays in the book (on the open pages, where the arrow keys turn them), not on <body>.
+        const active = document.activeElement;
+        if (inBook && (!active || active === document.body || active === from)) {
+          floatRef.current?.querySelector<HTMLElement>(".ipb__pages")?.focus({ preventScroll: true });
+        }
+      });
+    },
+    [ensureAt],
+  );
 
   const built = usePassportContent(passport, {
     slotOverrides,
@@ -689,6 +1149,7 @@ export function Demo() {
     pageWidth: 338,
     coverInteractive: coverIdle,
     onEmptySlotSelect,
+    onIslandSelect,
   });
   closeStampRef.current = built.closeStamp;
 
@@ -698,35 +1159,49 @@ export function Demo() {
   /* ---------------------------- chrome ---------------------------- */
 
   const working = busy !== null;
+  /** A moment is on the page, even if the button has already been handed back: no swipes under it. */
+  const blocked = working || press !== null || inline !== null;
+  const blockedRef = useRef(blocked);
+  blockedRef.current = blocked;
+
   let cta: string;
-  let note: string;
-  if (busy === "collect" || busy === "donate" || busy === "confirm") {
-    cta = D.steps[busy].busy;
-  } else if (busy === "award") cta = D.award.busy;
+  if (busy === "collect") cta = opening && !press ? D.steps.collect.opening : D.steps.collect.busy;
+  else if (busy === "donate" || busy === "confirm") cta = D.steps[busy].busy;
+  else if (busy === "award") cta = bridge !== null ? t(D.award.bridge, { n: bridge, province: passport.province }) : D.award.busy;
+  else if (busy === "reset") cta = D.done.busy;
   else if (step === "collect") cta = D.steps.collect.cta;
   else if (step === "donate") cta = D.steps.donate.cta;
   else if (step === "confirm") cta = D.steps.confirm.cta;
   else if (step === "award") cta = strings.actions.awardProvincial;
   else cta = D.done.cta;
 
+  let note: ReactNode;
   if (step === "collect") note = t(D.steps.collect.note, { title: storyStamp.title, island: storyStamp.island, promoter: storyStamp.promoter });
   else if (step === "donate") note = t(D.steps.donate.note, { charity: storyStamp.charity });
   else if (step === "confirm") note = t(D.steps.confirm.note, { charity: storyStamp.charity });
   else if (step === "award") note = t(D.award.note, { n: progress.verified, province: passport.province });
-  else note = D.done.note;
+  else if (strings.app.bidder) {
+    // Who made this, only once the bidder has filled it in (strings.app.bidder).
+    const byline = t(D.byline, { bidder: strings.app.bidder });
+    note = strings.app.contactHref ? <a href={strings.app.contactHref}>{byline}</a> : byline;
+  } else note = D.done.note;
 
   const open = bookState === "open";
 
   const blockKeys = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!busyRef.current || !NAV_KEYS.has(e.key)) return;
+    if (!blockedRef.current || !NAV_KEYS.has(e.key)) return;
     e.stopPropagation();
     if (e.key !== "Escape") e.preventDefault();
   };
 
   const touchCover = useCallback(() => {
-    setLive(true);
+    // Not urgent: the first 150 ms of the cover's swing show nothing of the pages, and rendering
+    // them inside the pointer handler used to hold the first frame back.
+    startTransition(() => setLive(true));
     warm();
   }, [warm]);
+
+  const playFullMotion = useCallback(() => setFullMotion(true), []);
 
   const Press = moments?.StampPress;
   const Award = moments?.ProvincialAward;
@@ -758,7 +1233,7 @@ export function Demo() {
             <span className="sample-tag ipd-intro__tag">{D.eyebrow}</span>
             <span className="ipd-intro__text">{t(D.intro, { province: passport.province })}</span>
           </p>
-          <Notice notice={notice} onDismiss={dismissNotice} />
+          <Notice notice={notice} onDismiss={dismissNotice} reduced={motionOverride} />
         </div>
 
         <div
@@ -777,14 +1252,15 @@ export function Demo() {
               pages={pages}
               backCover={built.backCover}
               chrome="bare"
+              reducedMotion={motionOverride}
               onFlip={onFlip}
               onFlipStart={pageStore.set}
               onStateChange={onStateChange}
             />
           </div>
           <div className="ipd-ground" aria-hidden="true" />
-          {working && !press && !awardOpen && (
-            // While a moment plays in the page, the book does not take swipes. A tap skips it.
+          {blocked && (
+            // While a moment plays on the page, the book does not take swipes. A tap skips the upgrade.
             <div className="ipd-block" onClick={() => upgradeRef.current?.skip()} aria-hidden="true" />
           )}
         </div>
@@ -792,10 +1268,12 @@ export function Demo() {
         <Hint
           store={pageStore}
           passport={passport}
+          root={floatRef}
           open={open}
-          quiet={working}
-          reducedNote={reduced && !started}
-          pulse={!reduced}
+          quiet={blocked}
+          motionChoice={systemReduced && !fullMotion && !started}
+          onFullMotion={playFullMotion}
+          pulse={hydrated && !reduced}
           pageCount={pageCount}
         />
 
@@ -811,10 +1289,13 @@ export function Demo() {
         busy={working}
         cta={cta}
         note={note}
+        reduced={motionOverride}
         onAction={onAction}
+        onJump={(to) => void jump(to)}
         onReplay={step !== "collect" || fresh.length > 0 ? () => void replay() : undefined}
         onIntent={warm}
-        tools={<StampPressSoundToggle sound={sound} onSoundToggle={setSound} className="ipd-tool ipd-tool--sound" />}
+        // The engine's own mute state, saved by the engine: the one switch for every sound here.
+        tools={<StampPressSoundToggle className="ipd-tool ipd-tool--sound" />}
       />
 
       {built.sheet}
@@ -825,9 +1306,12 @@ export function Demo() {
           stamp={press.stamp}
           target={press.target}
           surface={floatRef}
-          sound={sound}
           announce={false}
-          onImpact={() => onPressImpact(press.slotId)}
+          // No tap-anywhere skip: its full-screen layer swallowed taps meant for the button, the
+          // header and the switcher, and cut the hero moment short. It lasts 1.3 s.
+          skippable={false}
+          reducedMotion={motionOverride}
+          onImpact={() => onPressImpact(press.stamp)}
           onComplete={() => onPressComplete(press.stamp)}
         />
       )}
@@ -838,6 +1322,9 @@ export function Demo() {
           stamp={provincialStamp}
           verifiedCount={progress.verified}
           target={awardTarget}
+          // The book takes the landing hit, as it takes the stamper's.
+          surface={floatRef}
+          reducedMotion={motionOverride}
           onAdd={onAwardAdd}
           onLanded={onAwardLanded}
           onComplete={onAwardComplete}

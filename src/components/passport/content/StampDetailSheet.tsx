@@ -7,11 +7,13 @@
  * - Rendered in a portal on <body>, so the page-flip transforms never clip it. The portal root
  *   carries data-direction, so it keeps the art direction of the page it was opened from.
  * - Drag the handle or the header down to dismiss; Escape and the backdrop also close it.
- * - Focus moves into the sheet, is kept inside it, and returns to the stamp on close.
+ * - Focus moves into the sheet, is kept inside it, and returns to the stamp on close. Keys are
+ *   handled on the window while the sheet is open, so Escape and Tab work wherever focus is
+ *   (after a tap on the text of the sheet it is on the panel or on <body>).
  * - Reduced motion: a plain fade.
  */
 import { AnimatePresence, motion, useDragControls, useReducedMotion, type PanInfo } from "motion/react";
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Stamp } from "@/components/stamp";
 import { useDirectionId } from "@/components/theme";
@@ -28,7 +30,8 @@ export interface StampDetailSheetProps {
   province?: string;
 }
 
-const FOCUSABLE = 'button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+/** `a[href]`, not `[href]`: the stamp's SVG has <textPath href> and <use href>, which cannot take focus. */
+const FOCUSABLE = 'button:not([disabled]), a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 export function StampDetailSheet({ stamp, onClose, province }: StampDetailSheetProps) {
   const direction = useDirectionId();
@@ -58,10 +61,13 @@ function SheetBody({ stamp, onClose, province, direction }: SheetBodyProps) {
   const titleId = useId();
   const provincial = stamp.kind === "provincial";
 
+  const close = useRef(onClose);
+  close.current = onClose;
+
   // Focus in, focus back out, and stop the page behind from scrolling.
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButton.current?.focus({ preventScroll: true });
+    (closeButton.current ?? panel.current)?.focus({ preventScroll: true });
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
@@ -70,42 +76,61 @@ function SheetBody({ stamp, onClose, province, direction }: SheetBodyProps) {
     };
   }, []);
 
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    // Keep keys inside the dialog: arrow keys would otherwise turn passport pages.
-    e.stopPropagation();
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onClose();
-      return;
-    }
-    if (e.key !== "Tab" || !panel.current) return;
-    const items = Array.from(panel.current.querySelectorAll<HTMLElement>(FOCUSABLE));
-    if (items.length === 0) return;
-    const first = items[0];
-    const last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
-      e.preventDefault();
-      first.focus();
-    }
-  };
+  // The sheet is modal: while it is mounted it owns the keyboard. Listening on the window in the
+  // capture phase means this runs wherever focus is and before the book underneath sees the key
+  // (Escape would close the book too, arrow keys would turn its pages).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const root = panel.current;
+      if (!root) return;
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close.current();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (items.length === 0) {
+        e.preventDefault();
+        root.focus({ preventScroll: true });
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const active = document.activeElement;
+      const inside = active instanceof HTMLElement && active !== root && root.contains(active);
+      if (!inside) {
+        // Focus is on the panel itself, on <body> or behind the sheet: bring it back in.
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
 
   const onDragEnd = (_: unknown, info: PanInfo) => {
     if (info.offset.y > 110 || info.velocity.y > 650) onClose();
   };
 
   const status = stamp.status;
-  const statusText = provincial ? cs.sheet.statusProvincial : statusLabel(status);
+  // The title of the Provincial Stamp's sheet already says "Provincial Stamp": its pill says "Awarded".
+  const statusText = provincial ? cs.sheet.awarded : statusLabel(status);
   const statusBlurb = provincial ? "" : strings.status[status].blurb;
 
-  const rows: { label: string; value: string; mono?: boolean; tone?: boolean }[] = provincial
+  // The status is the pill under the title. It is not repeated as a row.
+  const rows: { label: string; value: string; mono?: boolean }[] = provincial
     ? [
         { label: cs.sheet.provincialIsland, value: province ?? stamp.island },
         { label: cs.sheet.reason, value: stamp.purpose },
-        { label: cs.sheet.awarded, value: formatDate(stamp.date), mono: true },
-        { label: strings.stampDetail.status, value: statusText, tone: true },
+        { label: strings.stampDetail.date, value: formatDate(stamp.date), mono: true },
       ]
     : [
         {
@@ -117,7 +142,6 @@ function SheetBody({ stamp, onClose, province, direction }: SheetBodyProps) {
         { label: strings.stampDetail.charity, value: stamp.charity },
         { label: strings.stampDetail.purpose, value: stamp.purpose },
         { label: strings.stampDetail.date, value: formatDate(stamp.date), mono: true },
-        { label: strings.stampDetail.status, value: statusText, tone: true },
       ].filter((row) => row.value);
 
   const spring = { type: "spring" as const, stiffness: 270, damping: 25, mass: 1 };
@@ -140,7 +164,7 @@ function SheetBody({ stamp, onClose, province, direction }: SheetBodyProps) {
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        onKeyDown={onKeyDown}
+        tabIndex={-1}
         initial={reduce ? { opacity: 0 } : { y: "104%" }}
         animate={reduce ? { opacity: 1 } : { y: 0 }}
         exit={reduce ? { opacity: 0 } : { y: "104%", transition: { duration: 0.26, ease: [0.4, 0, 1, 1] } }}
@@ -206,9 +230,7 @@ function SheetBody({ stamp, onClose, province, direction }: SheetBodyProps) {
                 transition={{ duration: 0.36, delay: rowDelay(i), ease: [0.22, 1, 0.36, 1] }}
               >
                 <dt>{row.label}</dt>
-                <dd data-mono={row.mono ? "" : undefined} data-tone={row.tone ? "" : undefined}>
-                  {row.value}
-                </dd>
+                <dd data-mono={row.mono ? "" : undefined}>{row.value}</dd>
               </motion.div>
             ))}
           </dl>

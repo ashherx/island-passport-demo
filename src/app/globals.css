@@ -275,6 +275,31 @@ body {
   text-transform: uppercase;
 }
 
+/*
+ * The pending clock badge is a solid disc of ink with the clock in paper (see PendingBadge in
+ * Stamp.tsx). A mark drawn elsewhere with the same class (the upgrade overlay, whose clock hands
+ * race) is given the same look: its first circle is the disc, everything else prints in paper.
+ */
+.ip-stamp__pendingmark:not([data-solid]) > circle:first-of-type {
+  fill: currentColor;
+}
+
+.ip-stamp__pendingmark:not([data-solid]) > circle:not(:first-of-type),
+.ip-stamp__pendingmark:not([data-solid]) path:not([id]) {
+  stroke: var(--paper);
+}
+
+.ip-stamp__pendingmark:not([data-solid]) text {
+  fill: var(--paper);
+  stroke: none;
+}
+
+/* Carries the rough-edge filter for the illustration (a filter on the masked box itself would run before the mask). */
+.ip-stamp__rough {
+  position: absolute;
+  inset: 0;
+}
+
 /* The illustration: an alpha mask tinted with the status ink. */
 .ip-stamp__art {
   position: absolute;
@@ -300,7 +325,9 @@ body {
  * Escape hatch for heavy moments (e.g. while a page is mid-flip on a slow phone):
  * put data-stamp-ink="clean" on any ancestor to drop the SVG ink filter. Stamps stay legible.
  */
-[data-stamp-ink="clean"] .ip-stamp__ink {
+[data-stamp-ink="clean"] .ip-stamp__ink,
+[data-stamp-ink="clean"] .ip-stamp__rough,
+[data-stamp-ink="clean"] .ip-stamp__disp {
   filter: none !important;
 }
 

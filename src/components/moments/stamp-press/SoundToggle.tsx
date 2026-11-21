@@ -1,29 +1,31 @@
 "use client";
 
 /**
- * Switch for the stamp sound. Kept apart from StampPress.tsx so a host can show it without loading
- * the stamping moment itself (UX-7).
+ * The sound switch. It is the engine's own mute state (`@/lib/sound`), shown as a button: there is
+ * no second copy of "is sound on" anywhere. The choice is saved by the engine and applies to every
+ * sound in the demo, on every page that shows this switch.
+ *
+ * Kept apart from StampPress.tsx so a host can show it without loading the stamping moment (UX-7).
  */
 import { useEffect, useState } from "react";
-import { canPlaySound, playThunk, primeSound } from "./feedback";
+import { play, useSound } from "@/lib/sound";
 import { pressStrings } from "./strings";
 
 export interface StampPressSoundToggleProps {
-  /** Whether the thunk is on. Muted (false) by default in every host. */
-  sound: boolean;
-  onSoundToggle(on: boolean): void;
   className?: string;
 }
 
 /**
- * Small switch for the stamp sound. Turning it on creates the audio context inside the click,
- * which is the only moment a browser allows it, and plays one quiet thunk as confirmation.
- * Renders nothing where Web Audio is missing.
+ * Turning it on unlocks audio inside the click (the only moment a browser allows it) and plays one
+ * tap as confirmation. Renders nothing where Web Audio is missing, and nothing until the saved
+ * choice is known (after mount), so someone who muted last time never sees it flash "on".
  */
-export function StampPressSoundToggle({ sound, onSoundToggle, className }: StampPressSoundToggleProps) {
-  const [available, setAvailable] = useState(false);
-  useEffect(() => setAvailable(canPlaySound()), []);
-  if (!available) return null;
+export function StampPressSoundToggle({ className }: StampPressSoundToggleProps) {
+  const { muted, available, setMuted } = useSound();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted || !available) return null;
+  const sound = !muted;
   return (
     <button
       type="button"
@@ -32,9 +34,9 @@ export function StampPressSoundToggle({ sound, onSoundToggle, className }: Stamp
       aria-label={pressStrings.sound.label}
       title={sound ? pressStrings.sound.on : pressStrings.sound.off}
       onClick={() => {
-        const next = !sound;
-        if (next && primeSound()) playThunk(0.5);
-        onSoundToggle(next);
+        setMuted(sound);
+        // Now on: setMuted(false) has started the audio context in this click, so this is heard.
+        if (!sound) play.tap();
       }}
       className={className}
       style={{ touchAction: "manipulation" }}

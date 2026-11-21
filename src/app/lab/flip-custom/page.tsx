@@ -369,7 +369,7 @@ export default function FlipCustomLabPage() {
   }, [stats]);
 
   const btn =
-    "type-label rounded-chip border border-line bg-elev px-4 py-2.5 text-fg transition-opacity disabled:opacity-35";
+    "type-label rounded-chip border border-line bg-elev px-3 py-2.5 sm:px-4 text-fg transition-opacity disabled:opacity-35";
 
   return (
     <main className="scene-bg flex min-h-dvh flex-col">

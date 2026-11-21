@@ -92,7 +92,7 @@ export interface ProvincialLandOptions {
   press?: number;
 }
 
-export type EmptyOptions = Record<string, never>;
+export type EmptyOptions = Record<never, never>;
 
 /* ------------------------------------------------------------------ */
 /* Small maths                                                         */

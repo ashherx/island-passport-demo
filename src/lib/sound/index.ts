@@ -15,6 +15,7 @@ export {
   setMuted,
   setPlayOnSilentSwitch,
   setVolume,
+  stopAllSounds,
   subscribe,
   toggleMuted,
   unlock,

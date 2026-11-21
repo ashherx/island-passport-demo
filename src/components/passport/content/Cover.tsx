@@ -8,9 +8,10 @@
  *   - Classic and Reef: a debossed foil emblem, foil title and a foil or stitched frame.
  *   - Journal: a cloth spine tape, a printed label and the emblem rubber-stamped in dark ink.
  *
- * The foil reacts to light: `--tx` / `--ty` (-1..1) are written on the cover root by useCoverLight
- * from the pointer, from device tilt where the browser offers it without a permission prompt, and
- * from a slow idle glint. With reduced motion the foil is static.
+ * The cover reacts to light while the book is closed (see useCoverLight): on a desktop the foil
+ * follows the pointer; on touch devices a pre-painted highlight follows device tilt (where the
+ * browser offers it without a permission prompt) and a band of light crosses the cover now and
+ * then, both as compositor-only transforms. With reduced motion the cover is static.
  *
  * The emblem is an original mark (compass ring, three hills, sun, waves). It is not a coat of
  * arms and the cover does not imitate a government passport.
@@ -54,11 +55,41 @@ export async function requestCoverMotion(): Promise<boolean> {
 
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 
+/** The idle glint plays at most this often. */
+const GLINT_EVERY_MS = 6500;
+/** Tilt: changes smaller than this are ignored, and the light moves at most 30 times a second. */
+const TILT_STEP = 0.02;
+const TILT_MIN_INTERVAL_MS = 33;
+
+/**
+ * Light on the cover. Two modes, picked once per mount:
+ *
+ *   Fine pointer with hover (desktop). The foil follows the pointer: `--tx` / `--ty` are written on
+ *   the cover root every frame while the light is moving, and the foil gradients read them in
+ *   background-position. That repaints the foil, which a desktop affords.
+ *
+ *   Everything else (phones, tablets). Compositor only: nothing is ever repainted. The foil
+ *   gradients stay still. Device tilt slides the pre-painted specular highlight with a transform,
+ *   and the idle glint is one pre-painted band of light (.ipp-cover__glint) that crosses the cover
+ *   with a transform and opacity animation. No requestAnimationFrame loop runs at all.
+ *
+ * In both modes the light only reacts while the book around the cover is closed (the nearest
+ * `.ipb` ancestor has data-state="closed"; a cover outside a book counts as closed). It stops the
+ * moment the cover starts to swing, so the swing itself is never repainted. A press on the cover is
+ * not a light input: it is the tap that opens the book.
+ */
 function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean): void {
   useEffect(() => {
     const el = ref.current;
     if (!el || !enabled) return;
-    if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (typeof window.matchMedia !== "function") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    const specular = el.querySelector<HTMLElement>(".ipp-cover__specular");
+    const band = el.querySelector<HTMLElement>(".ipp-cover__glint");
+    const book = el.closest<HTMLElement>(".ipb");
+    const closed = () => !book || book.getAttribute("data-state") === "closed";
 
     let x = 0;
     let y = 0;
@@ -66,18 +97,22 @@ function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean):
     let goalY = 0;
     let frame = 0;
     let lastInput = 0;
+    let lastGlint = 0;
+    let lastTilt = 0;
     let glintStart = 0;
+    let bandRun: Animation | null = null;
     let visible = true;
     let baseBeta: number | null = null;
     let baseGamma: number | null = null;
 
-    const write = () => {
-      el.style.setProperty("--tx", x.toFixed(3));
-      el.style.setProperty("--ty", y.toFixed(3));
-    };
+    /* --- Fine pointer: the foil follows the light (repaints) --- */
 
     const tick = (now: number) => {
       frame = 0;
+      if (!closed()) {
+        glintStart = 0;
+        return;
+      }
       if (glintStart) {
         // One slow pass of light across the foil and back.
         const p = (now - glintStart) / 2400;
@@ -93,14 +128,16 @@ function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean):
       }
       x += (goalX - x) * 0.14;
       y += (goalY - y) * 0.14;
-      write();
+      el.style.setProperty("--tx", x.toFixed(3));
+      el.style.setProperty("--ty", y.toFixed(3));
       if (glintStart || Math.abs(goalX - x) > 0.003 || Math.abs(goalY - y) > 0.003) frame = requestAnimationFrame(tick);
     };
     const wake = () => {
-      if (!frame) frame = requestAnimationFrame(tick);
+      if (!frame && closed()) frame = requestAnimationFrame(tick);
     };
 
     const onPointer = (e: PointerEvent) => {
+      if (!closed()) return;
       const r = el.getBoundingClientRect();
       if (!r.width || !r.height) return;
       glintStart = 0;
@@ -110,10 +147,54 @@ function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean):
       wake();
     };
     const onLeave = () => {
+      if (!closed()) return;
       goalX = 0;
       goalY = 0;
       wake();
     };
+
+    /* --- Coarse pointer: transforms only --- */
+
+    let specularLive = false;
+    const moveSpecular = (nx: number, ny: number) => {
+      if (!specular) return;
+      if (!specularLive) {
+        // Promoted to its own layer on the first real tilt, so phones that never report tilt pay nothing.
+        specularLive = true;
+        specular.style.willChange = "transform";
+        specular.style.transition = "transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)";
+      }
+      specular.style.transform = `translate3d(${(nx * 16).toFixed(2)}%, ${(ny * 12 - 16).toFixed(2)}%, 0)`;
+    };
+
+    const stopBand = () => {
+      if (!bandRun) return;
+      bandRun.cancel();
+      bandRun = null;
+    };
+    const playBand = () => {
+      if (!band || typeof band.animate !== "function") return;
+      stopBand();
+      try {
+        const run = band.animate(
+          [
+            { transform: "translate3d(-130%, 0, 0) skewX(-14deg)", opacity: 0 },
+            { opacity: 1, offset: 0.2 },
+            { opacity: 1, offset: 0.8 },
+            { transform: "translate3d(215%, 0, 0) skewX(-14deg)", opacity: 0 },
+          ],
+          { duration: 1700, easing: "cubic-bezier(0.37, 0, 0.63, 1)" },
+        );
+        bandRun = run;
+        run.onfinish = () => {
+          if (bandRun === run) bandRun = null;
+        };
+      } catch {
+        bandRun = null;
+      }
+    };
+
+    /* --- Shared --- */
 
     const onTilt = (e: DeviceOrientationEvent) => {
       if (e.beta === null || e.gamma === null) return;
@@ -122,19 +203,24 @@ function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean):
         baseGamma = e.gamma;
         return;
       }
-      // Drift the rest position toward how the phone is held, so the foil re-centres.
+      // Drift the rest position toward how the phone is held, so the light re-centres.
       baseBeta += (e.beta - baseBeta) * 0.02;
       baseGamma += (e.gamma - baseGamma) * 0.02;
+      if (!closed()) return;
+      const now = performance.now();
+      if (now - lastTilt < TILT_MIN_INTERVAL_MS) return;
       const nx = clamp((e.gamma - baseGamma) / 18, -1, 1);
       const ny = clamp((e.beta - baseBeta) / 18, -1, 1);
-      if (Math.abs(nx - goalX) < 0.02 && Math.abs(ny - goalY) < 0.02) return;
+      if (Math.abs(nx - goalX) < TILT_STEP && Math.abs(ny - goalY) < TILT_STEP) return;
+      lastTilt = now;
       if (Math.abs(nx) > 0.08 || Math.abs(ny) > 0.08) {
         glintStart = 0;
-        lastInput = performance.now();
+        lastInput = now;
       }
       goalX = nx;
       goalY = ny;
-      wake();
+      if (fine) wake();
+      else moveSpecular(nx, ny);
     };
 
     let tiltOn = false;
@@ -149,22 +235,31 @@ function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean):
     if (!needsPrompt) startTilt();
     window.addEventListener(MOTION_GRANTED_EVENT, startTilt);
 
-    el.addEventListener("pointermove", onPointer, { passive: true });
-    el.addEventListener("pointerdown", onPointer, { passive: true });
-    el.addEventListener("pointerleave", onLeave, { passive: true });
+    if (fine) {
+      el.addEventListener("pointermove", onPointer, { passive: true });
+      el.addEventListener("pointerleave", onLeave, { passive: true });
+    } else {
+      el.setAttribute("data-light", "composited");
+    }
 
-    // Idle glint: only when nothing else has moved the light recently and the cover is on screen.
-    const glint = window.setInterval(() => {
-      if (!visible || document.hidden || glintStart) return;
-      if (performance.now() - lastInput < 3500) return;
-      glintStart = performance.now();
-      wake();
-    }, 6500);
-    const firstGlint = window.setTimeout(() => {
-      if (!visible || document.hidden || lastInput) return;
-      glintStart = performance.now();
-      wake();
-    }, 900);
+    // Idle glint: at most once every 6.5 s, only while the tab and the cover are visible, the book
+    // is closed and nothing else has moved the light recently.
+    const glint = () => {
+      const now = performance.now();
+      if (!visible || document.hidden || !closed()) return;
+      if (glintStart || bandRun) return;
+      if (lastGlint && now - lastGlint < GLINT_EVERY_MS) return;
+      if (lastInput && now - lastInput < 3500) return;
+      lastGlint = now;
+      if (fine) {
+        glintStart = now;
+        wake();
+      } else {
+        playBand();
+      }
+    };
+    const glintTimer = window.setInterval(glint, GLINT_EVERY_MS);
+    const firstGlint = window.setTimeout(glint, 900);
 
     let io: IntersectionObserver | null = null;
     if (typeof IntersectionObserver !== "undefined") {
@@ -174,18 +269,40 @@ function useCoverLight(ref: RefObject<HTMLDivElement | null>, enabled: boolean):
       io.observe(el);
     }
 
+    // The book has started to open (or anything else but "closed"): stop at once.
+    let stateWatch: MutationObserver | null = null;
+    if (book && typeof MutationObserver !== "undefined") {
+      stateWatch = new MutationObserver(() => {
+        if (closed()) return;
+        glintStart = 0;
+        if (frame) {
+          cancelAnimationFrame(frame);
+          frame = 0;
+        }
+        stopBand();
+      });
+      stateWatch.observe(book, { attributes: true, attributeFilter: ["data-state"] });
+    }
+
     return () => {
       if (frame) cancelAnimationFrame(frame);
-      window.clearInterval(glint);
+      window.clearInterval(glintTimer);
       window.clearTimeout(firstGlint);
       window.removeEventListener("deviceorientation", onTilt);
       window.removeEventListener(MOTION_GRANTED_EVENT, startTilt);
       el.removeEventListener("pointermove", onPointer);
-      el.removeEventListener("pointerdown", onPointer);
       el.removeEventListener("pointerleave", onLeave);
       io?.disconnect();
+      stateWatch?.disconnect();
+      stopBand();
+      el.removeAttribute("data-light");
       el.style.removeProperty("--tx");
       el.style.removeProperty("--ty");
+      if (specular && specularLive) {
+        specular.style.removeProperty("will-change");
+        specular.style.removeProperty("transition");
+        specular.style.removeProperty("transform");
+      }
     };
   }, [ref, enabled]);
 }
@@ -321,6 +438,8 @@ export function FrontCover({
         <div className="ipp-cover__specular" aria-hidden="true" />
         <div className="mat-sheen ipp-cover__sheen" aria-hidden="true" />
         <div className="ipp-cover__bevel" aria-hidden="true" />
+        {/* Last, so nothing of the cover has to be composited above it. Only shown on touch devices. */}
+        <div className="ipp-cover__glint" aria-hidden="true" />
       </Frame>
     </div>
   );

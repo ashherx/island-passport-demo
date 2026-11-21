@@ -49,7 +49,18 @@ export function getPassportPageMap(data: PassportData): PassportPageMap {
   };
 }
 
-export function buildPassportPages(data: PassportData, opts: BuildPassportOptions = {}): PassportContent {
+/** Set by usePassportContent: the island the reader last jumped to from the province page. */
+export interface IslandArrival {
+  islandId: string;
+  /** Counts up with every jump, so jumping to the same island twice pulses twice. */
+  n: number;
+}
+
+export function buildPassportPages(
+  data: PassportData,
+  opts: BuildPassportOptions = {},
+  arrival: IslandArrival | null = null,
+): PassportContent {
   const pageMap = getPassportPageMap(data);
   const total = pageMap.count;
   const progress = getProgress(data);
@@ -92,6 +103,7 @@ export function buildPassportPages(data: PassportData, opts: BuildPassportOption
       markers={markers}
       overrides={opts.slotOverrides}
       chrome={chrome(pageMap.province)}
+      onIslandSelect={opts.onIslandSelect}
     />,
     ...groups.map((g, i) => (
       <IslandPage
@@ -105,6 +117,7 @@ export function buildPassportPages(data: PassportData, opts: BuildPassportOption
         chrome={chrome(pageMap.islands[g.island.id])}
         onStampSelect={opts.onStampSelect}
         onEmptySlotSelect={opts.onEmptySlotSelect}
+        locate={arrival?.islandId === g.island.id ? arrival.n : 0}
       />
     )),
     <ProvincialPage
@@ -164,23 +177,36 @@ export function usePassportContent(data: PassportData, opts: BuildPassportOption
   const onEmptySlotSelect = useCallback((slot: StampSlot) => {
     latest.current.onEmptySlotSelect?.(slot);
   }, []);
+  // Same stable-callback pattern as the handlers above. The jump is also remembered here, so the
+  // locator on the island page can pulse once when the reader arrives.
+  const [arrival, setArrival] = useState<IslandArrival | null>(null);
+  const onIslandSelect = useCallback((islandId: string) => {
+    setArrival((prev) => ({ islandId, n: (prev?.n ?? 0) + 1 }));
+    latest.current.onIslandSelect?.(islandId);
+  }, []);
   const closeStamp = useCallback(() => setSelectedId(null), []);
   const openStamp = useCallback((slotId: string) => setSelectedId(slotId), []);
 
   const hasEmptyHandler = Boolean(opts.onEmptySlotSelect);
+  const hasIslandHandler = Boolean(opts.onIslandSelect);
   const { slotOverrides, layout, pageWidth, coverInteractive, coverPageEdge } = opts;
   const content = useMemo(
     () =>
-      buildPassportPages(data, {
-        slotOverrides,
-        layout,
-        pageWidth,
-        coverInteractive,
-        coverPageEdge,
-        onStampSelect,
-        onProvincialSelect,
-        onEmptySlotSelect: hasEmptyHandler ? onEmptySlotSelect : undefined,
-      }),
+      buildPassportPages(
+        data,
+        {
+          slotOverrides,
+          layout,
+          pageWidth,
+          coverInteractive,
+          coverPageEdge,
+          onStampSelect,
+          onProvincialSelect,
+          onEmptySlotSelect: hasEmptyHandler ? onEmptySlotSelect : undefined,
+          onIslandSelect: hasIslandHandler ? onIslandSelect : undefined,
+        },
+        arrival,
+      ),
     [
       data,
       slotOverrides,
@@ -192,6 +218,9 @@ export function usePassportContent(data: PassportData, opts: BuildPassportOption
       onProvincialSelect,
       onEmptySlotSelect,
       hasEmptyHandler,
+      onIslandSelect,
+      hasIslandHandler,
+      arrival,
     ],
   );
 

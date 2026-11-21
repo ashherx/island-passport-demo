@@ -1,5 +1,7 @@
 # Integrator handoff
 
+> **Updated by the polish round.** Timings, props and layout numbers below may be out of date. `docs/agents/polish.md` lists what changed and is the current reference where the two disagree.
+
 The composed demo is the home page: `http://localhost:3100/`.
 Add `?debug` for a frame-rate read-out and a `window.__ipBook()` handle (used by the test scripts).
 
@@ -15,7 +17,7 @@ on iOS Safari, or inside the Instagram, TikTok or Facebook in-app browsers.
    keys. Tap any stamp for the detail sheet (PAS-4). Tap any empty slot to stamp it (free play).
 3. **Scripted story**, from the floating action bar. Each step opens the book if needed, riffles to
    the right page, then plays its moment on the page:
-   - **Collect a stamp**: `StampPress` into the empty "Turtle nesting beach" slot on Pamilacan. Discovery. The ring ticks 6 to 7.
+   - **Collect a stamp**: `StampPress` into the empty "Spinner dolphins" slot on Pamilacan. Discovery. The ring ticks 6 to 7.
    - **Donate**: the same stamp becomes "Donation pending" in place (`DonateTransition`), with a notice that explains the charity's page would open. Nothing says "donated".
    - **Charity confirms**: `StatusUpgrade` to Verified Supporter, inside the slot.
    - That makes three Verified stamps, so `ProvincialAward` opens by itself about a second later. "Add to passport" riffles to the Provincial page and the stamp lands in its slot.
@@ -87,7 +89,7 @@ Not grafted: catching a page in mid-air, and a spring settle on landing.
 ## Where this differs from the brief
 
 - **Ring ticks 6 to 7, not 3 to 4.** The foundation's sample data starts at 6 of 12, which shows all three statuses on the first pages. I left it alone.
-- **The story follows one stamp** (`pamilacan-turtle-beach`) through all three statuses, as the brief describes, not the two slots in `DEMO_SCRIPT`.
+- **The story follows one stamp** (`pamilacan-dolphins`, `DEMO_SCRIPT.collectSlotId`) through all three statuses, as the brief describes. The island's page text is about the same dolphins.
 - **Header is one row.** The pages agent's two-row header cost 50px of book height on a phone. The demo passes `appearance="none"` and puts the switcher in `actions`: swatches on phones, named chips from 760px. On phones the wordmark text is hidden; the cover right below carries the name.
 - **No skeleton**, because the cover is server-rendered.
 - **The step note under the button is visually hidden on screens under 720px tall** to give the book the room (it stays in the accessibility tree).
@@ -127,7 +129,6 @@ In story 1 the cover swing and the riffle are clean. The late frames are one of 
 - **Free play** only collects (Discovery). Donate and confirm exist for the story stamp only.
 - **The engine still reaches into `page-flip` internals.** Keep it pinned at 2.0.7.
 - **Sample geography and names** (chart outline, coordinates, charities, promoters) are unverified, as the foundation and pages agents noted.
-- **`README.md` is still the create-next-app default.**
 
 ## Scripts
 

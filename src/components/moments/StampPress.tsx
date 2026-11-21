@@ -3,9 +3,9 @@
 /**
  * <StampPress />: the moment a stamp is earned (UX-3).
  *
- * Give it the stamp and the slot on the passport page. A stamper appears above the slot with its
- * inked face showing, swings over, slams down (squash, page nudge, vibration, optional thunk) and
- * lifts away to leave the impression, a few ink flecks and a glint on the wet ink. About 1.4 s,
+ * Give it the stamp and the slot on the passport page. A stamper sweeps in from the lower right
+ * with its inked face showing, turns over, winds up, slams down (squash, page nudge, vibration, sound) and
+ * lifts away to leave the impression, a few ink flecks and a glint on the wet ink. About 1.3 s,
  * skippable with a tap or Escape. With reduced motion the impression simply fades in.
  *
  * Everything is drawn in a fixed overlay portalled to <body>, so it is never clipped by a passport
@@ -32,7 +32,8 @@ import { artUrl } from "@/lib/assets";
 import type { DirectionTokens } from "@/lib/directions";
 import { strings, t } from "@/lib/strings";
 import type { Stamp as StampData, StampShape } from "@/lib/types";
-import { IMPACT_PATTERN, nudge, playThunk, soundReady, vibrate } from "./stamp-press/feedback";
+import { play as sfx } from "@/lib/sound";
+import { IMPACT_PATTERN, nudge, vibrate } from "./stamp-press/feedback";
 import { InkSpeckles } from "./stamp-press/InkSpeckles";
 import { stamperMaterial } from "./stamp-press/materials";
 import {
@@ -49,7 +50,7 @@ import { pressStrings } from "./stamp-press/strings";
 import { PRESS, REDUCED_FADE, impressionFrame, stamperFrame } from "./stamp-press/timeline";
 
 export { InkSpeckles, inkFlecks, type InkSpecklesProps } from "./stamp-press/InkSpeckles";
-export { canVibrate, canPlaySound, primeSound, playThunk, vibrate, nudge, IMPACT_PATTERN } from "./stamp-press/feedback";
+export { canVibrate, vibrate, nudge, IMPACT_PATTERN } from "./stamp-press/feedback";
 export { PRESS as STAMP_PRESS_TIMING } from "./stamp-press/timeline";
 export { pressStrings } from "./stamp-press/strings";
 export { StampPressSoundToggle, type StampPressSoundToggleProps } from "./stamp-press/SoundToggle";
@@ -100,7 +101,11 @@ export interface StampPressProps {
    * placeholder does not show through the fresh ink. Restored on unmount at the latest. Default true.
    */
   hideTarget?: boolean;
-  /** Play the synthesized thunk. Muted by default; needs primeSound() from a gesture (the toggle does it). */
+  /**
+   * Play the stamp sound at impact (`play.stampPress()` from `@/lib/sound`). The sound switch and
+   * its saved choice decide whether anything is heard; pass false to keep this press silent
+   * regardless. Default true.
+   */
   sound?: boolean;
   /** Vibrate on impact where supported. Default true. */
   haptics?: boolean;
@@ -108,18 +113,18 @@ export interface StampPressProps {
   skippable?: boolean;
   /** Announce "Stamp collected" to screen readers. Default true. */
   announce?: boolean;
-  /** Playback rate. 1 is real time (about 1.4 s), 0.25 is slow motion. */
+  /** Playback rate. 1 is real time (about 1.3 s), 0.25 is slow motion. */
   speed?: number;
   /** Stacking order of the overlay. Default 80. */
   zIndex?: number;
   /**
-   * Fires once, about 50 ms after the rubber meets the paper (0.75 s in): late enough that the hit
+   * Fires once, about 50 ms after the rubber meets the paper (0.67 s in): late enough that the hit
    * itself is on screen before the host re-renders. Commit the stamp to your data here (the slot,
    * counters, the progress ring). The target is hidden at this point, so the page's own stamp can
    * appear in it unseen and take over at the end.
    */
   onImpact?(): void;
-  /** Fires once when the impression has settled (about 1.4 s in), or right after a skip. Unmount here. */
+  /** Fires once when the impression has settled (about 1.3 s in), or right after a skip. Unmount here. */
   onComplete?(): void;
   /** Development aid: hold the moment at this time in seconds instead of playing it. */
   freezeAt?: number;
@@ -258,7 +263,7 @@ function PressOverlay({
   ink: inkQuality = "rough",
   surface,
   hideTarget = true,
-  sound = false,
+  sound = true,
   haptics = true,
   skippable = true,
   announce = true,
@@ -448,6 +453,9 @@ function PressOverlay({
 
     /* Things that happen once, when the rubber meets the paper. */
     let impacted = false;
+    /** Playback rate of the moment, and whether a skip is fast-forwarding it. */
+    const rate = Math.max(0.05, speed);
+    let hurried = false;
     let hidden: { el: HTMLElement; opacity: string; transition: string } | null = null;
     const impact = (physical: boolean) => {
       if (impacted) return;
@@ -467,7 +475,13 @@ function PressOverlay({
         else nudge(box, IMPACT_NUDGE);
       }
       if (p.haptics && !bailed) vibrate(physical ? IMPACT_PATTERN : 12);
-      if (p.sound && !bailed && soundReady()) playThunk();
+      if (p.sound && !bailed && freezeAt == null) {
+        // The same frame as the squash and the nudge. In real time: the full hit, and the rubber
+        // peeling off as the tool starts to lift. Fast-forwarded (a skip) or faded in (reduced
+        // motion): a softer hit and nothing after it.
+        if (physical && !hurried) sfx.stampPress({ intensity: 1, lift: (PRESS.liftStart - PRESS.impact) / rate });
+        else sfx.stampPress({ intensity: 0.5, lift: false });
+      }
       // The host usually re-renders in onImpact (counters, the slot). Let the hit itself reach the
       // screen first: the callback runs a few frames later, while the tool rests on the page.
       if (physical) pendingImpact = window.setTimeout(notifyImpact, 48);
@@ -603,11 +617,12 @@ function PressOverlay({
           },
         });
       render(0);
-      controls = play(0, PRESS.duration / Math.max(0.05, speed));
+      controls = play(0, PRESS.duration / rate);
       let skipped = false;
       skipRef.current = () => {
         if (skipped || finished) return;
         skipped = true;
+        hurried = true;
         controls?.stop();
         // Fast-forward rather than cut: the rest of the moment plays out in a blink.
         controls = play(now, Math.max(0.12, ((PRESS.duration - now) / PRESS.duration) * 0.26));

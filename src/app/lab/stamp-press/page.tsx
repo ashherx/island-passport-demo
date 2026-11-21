@@ -70,7 +70,6 @@ export default function StampPressLabPage() {
   const [pressing, setPressing] = useState(false);
   const [run, setRun] = useState(0);
   const [toast, setToast] = useState(false);
-  const [sound, setSound] = useState(false);
   const [slow, setSlow] = useState(false);
   const [haptics, setHaptics] = useState<boolean | null>(null);
   const [debug, setDebug] = useState<{ freezeAt?: number; speed?: number }>({});
@@ -261,7 +260,7 @@ export default function StampPressLabPage() {
         </button>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <StampPressSoundToggle sound={sound} onSoundToggle={setSound} className={toggleClass} />
+          <StampPressSoundToggle className={toggleClass} />
           <button
             type="button"
             role="switch"
@@ -310,7 +309,6 @@ export default function StampPressLabPage() {
           target={slotRef}
           surface={surfaceRef}
           announce={false}
-          sound={sound}
           speed={debug.speed ?? (slow ? 0.25 : 1)}
           freezeAt={debug.freezeAt}
           onImpact={() => setCollected(true)}

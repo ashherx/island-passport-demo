@@ -6,14 +6,19 @@
  * Layers, back to front:
  *   .ip-stamp               sized box, role="img"
  *     .ip-stamp__tilt       per-stamp rotation (deterministic from the id)
- *       .ip-stamp__ink      everything printed in ink, run through the rubber-stamp SVG filter
- *         svg               frame, text set on the frame, date, pending clock badge
- *         .ip-stamp__art    the illustration: CSS mask-image tinted with the status ink
+ *       .ip-stamp__ink      everything printed in ink: dry speckle, density and the press reveal
+ *         svg               frame and pending clock badge (rough edge), then the lettering
+ *         .ip-stamp__rough  rough edge for the illustration
+ *           .ip-stamp__art  the illustration: CSS mask-image tinted with the status ink
  *       svg.ip-stamp__seal  gold foil (Verified Supporter seal, Provincial ring). Never filtered.
  *
+ * The rough edge (displacement) is applied to the frame and the artwork only. Lettering gets a
+ * much lighter wobble, and none at all on small stamps, so counters of C, G, O, 0 and 8 stay open.
+ *
  * STM-5: the artwork is only a template. Island, promoter, status and date are overlaid here.
- * STM-7: Discovery = crisp outline, one ink. Donation pending = dashed, hollow, pale, clock badge.
- *        Verified Supporter = solid inked band with reversed-out type plus the foil seal.
+ * STM-7: Discovery = crisp outline, one ink. Donation pending = dashed and hollow, in full-strength
+ *        ink, with a solid clock badge. Verified Supporter = solid inked band with reversed-out
+ *        type plus the foil seal. An empty slot is a faint dotted ghost.
  */
 import { useEffect, useId, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { useDirectionTokens } from "@/components/theme/ThemeProvider";
@@ -21,8 +26,8 @@ import { artUrl } from "@/lib/assets";
 import type { DirectionTokens } from "@/lib/directions";
 import { formatDate, formatStampDate, stampDateParts, strings, t } from "@/lib/strings";
 import type { Stamp as StampData, StampArt, StampKind, StampShape, StampSlot, StampStatus } from "@/lib/types";
-import { FoilDefs, PendingMark, SealMark } from "./Seal";
-import { C, arcBottom, arcTop, fitFont, polygonPath, rand, round2, scallopPath, sparklePath, starPath } from "./geometry";
+import { FoilDefs, SealMark } from "./Seal";
+import { C, arcBottom, arcTop, circlePath, fitFont, polygonPath, rand, round2, scallopPath, sparklePath, starPath } from "./geometry";
 
 /* ------------------------------------------------------------------ */
 /* Public API                                                          */
@@ -106,12 +111,18 @@ interface ArtBox {
 }
 
 interface Drawn {
-  /** Mask content (white = keep) applied to `frame`. */
-  mask?: ReactNode;
+  /** Black shapes cut out of `frame` before the rough edge is applied (the gap round the clock badge). */
+  hole?: ReactNode;
+  /** Lettering knocked out of `frame` (black = paper shows through). Cut after the rough edge, so it stays legible. */
+  ko?: ReactNode;
+  /** Defs the lettering needs (text paths). */
+  defs?: ReactNode;
   /** Frame lines and filled bands. */
   frame: ReactNode;
   /** Text and marks printed in ink on top of the frame. */
   marks?: ReactNode;
+  /** Opacity of the frame group (the empty placeholder is a ghost). */
+  frameOpacity?: number;
   /** Foil elements, drawn in the unfiltered layer. */
   foil?: ReactNode;
   art: ArtBox;
@@ -247,16 +258,12 @@ function drawRing(ctx: DrawContext): Drawn {
   const thinW = (compact ? 2 : 1.25) * w;
   const hasSecond = shape === "scalloped" || shape === "octagon";
   let frame: ReactNode;
-  let mask: ReactNode;
+  let hole: ReactNode;
+  let ko: ReactNode;
 
   if (verified) {
     // Rich impression: the band is solid ink and the type is the paper showing through.
-    mask = (
-      <>
-        <rect width="200" height="200" fill="#fff" />
-        {frameText("ip-stamp__ko")}
-      </>
-    );
+    ko = frameText("ip-stamp__ko");
     frame = (
       <>
         {outline(shape, { fill: "none", stroke: "currentColor", strokeWidth: outerW * 1.05, strokeLinejoin: "round" })}
@@ -268,20 +275,16 @@ function drawRing(ctx: DrawContext): Drawn {
       </>
     );
   } else if (pending) {
-    // Hollow and provisional: dashed outline, dotted inner ring, and a gap where the clock badge sits.
-    mask = (
-      <>
-        <rect width="200" height="200" fill="#fff" />
-        <circle cx={anchor.x} cy={anchor.y} r={PENDING_R + 4.5} fill="#000" />
-      </>
-    );
+    // Hollow and provisional, but printed at full strength: dashed outline, dotted inner ring, and a
+    // gap where the clock badge sits.
+    hole = <circle cx={anchor.x} cy={anchor.y} r={PENDING_R + 4.5} fill="#000" />;
     frame = (
       <>
         {outline(shape, {
           fill: "none",
           stroke: "currentColor",
-          strokeWidth: (compact ? 3.4 : 2.3) * w,
-          strokeDasharray: compact ? "10 7.5" : "7.5 5.5",
+          strokeWidth: (compact ? 4.2 : 3.0) * w,
+          strokeDasharray: compact ? "11 7" : "8 5.2",
           strokeLinecap: "butt",
           strokeLinejoin: "round",
         })}
@@ -292,8 +295,8 @@ function drawRing(ctx: DrawContext): Drawn {
           ry={band.iy}
           fill="none"
           stroke="currentColor"
-          strokeWidth={(compact ? 2.4 : 1.7) * w}
-          strokeDasharray={compact ? "0.1 6.5" : "0.1 4.6"}
+          strokeWidth={(compact ? 3.1 : 2.1) * w}
+          strokeDasharray={compact ? "0.1 6.2" : "0.1 4.8"}
           strokeLinecap="round"
         />
       </>
@@ -319,7 +322,6 @@ function drawRing(ctx: DrawContext): Drawn {
 
   const marks = (
     <>
-      <defs>{defs}</defs>
       {!verified && frameText()}
       {showDate && (
         <text
@@ -336,7 +338,7 @@ function drawRing(ctx: DrawContext): Drawn {
     </>
   );
 
-  return { mask, frame, marks, art, artOpacity: pending ? 0.78 : 1 };
+  return { hole, ko, defs, frame, marks, art, artOpacity: pending ? 0.92 : 1 };
 }
 
 /* --- Rounded rectangle: an entry-visa layout ------------------------ */
@@ -368,27 +370,13 @@ function drawRounded(ctx: DrawContext): Drawn {
       </text>
     ) : null;
 
-  const dash = pending ? { strokeDasharray: compact ? "10 7.5" : "7.5 5.5" } : {};
+  const dash = pending ? { strokeDasharray: compact ? "11 7" : "8 5.2" } : {};
   const dots = pending ? { strokeDasharray: "0.1 4.6", strokeLinecap: "round" as const } : {};
-  const outerW = pending ? (compact ? 3.4 : 2.3) * w : (compact ? 4.6 : 3.2) * w;
-  const thinW = pending ? 1.7 * w : (compact ? 2 : 1.25) * w;
+  const outerW = pending ? (compact ? 4.2 : 3.0) * w : (compact ? 4.6 : 3.2) * w;
+  const thinW = pending ? 2.1 * w : (compact ? 2 : 1.25) * w;
 
-  let mask: ReactNode;
-  if (verified) {
-    mask = (
-      <>
-        <rect width="200" height="200" fill="#fff" />
-        {headerText("ip-stamp__ko")}
-      </>
-    );
-  } else if (pending) {
-    mask = (
-      <>
-        <rect width="200" height="200" fill="#fff" />
-        <circle cx={anchor.x} cy={anchor.y} r={PENDING_R + 4.5} fill="#000" />
-      </>
-    );
-  }
+  const ko = verified ? headerText("ip-stamp__ko") : undefined;
+  const hole = pending ? <circle cx={anchor.x} cy={anchor.y} r={PENDING_R + 4.5} fill="#000" /> : undefined;
 
   const frame = (
     <>
@@ -442,7 +430,7 @@ function drawRounded(ctx: DrawContext): Drawn {
       ? { cx: 61, cy: (headerY + footerY) / 2, size: 76 }
       : { cx: C, cy: (headerY + (showFooter ? footerY : 172)) / 2, size: showFooter ? 78 : 96 };
 
-  return { mask, frame, marks, art, artOpacity: pending ? 0.78 : 1 };
+  return { hole, ko, frame, marks, art, artOpacity: pending ? 0.92 : 1 };
 }
 
 /* --- Provincial seal ------------------------------------------------ */
@@ -465,25 +453,26 @@ function drawSeal(ctx: DrawContext): Drawn {
   const botId = `${id}-bot`;
   const showDate = labels && !compact && tpl.date.length > 0;
 
-  const mask = (
+  const ko = labels ? (
+    <g className="ip-stamp__ko">
+      <text fontSize={topSize} letterSpacing={`${tracking * 0.8}em`} textAnchor="middle">
+        <textPath href={`#${topId}`} startOffset="50%">
+          {top}
+        </textPath>
+      </text>
+      <text fontSize={bottomSize} letterSpacing={`${tracking * 0.8}em`} textAnchor="middle">
+        <textPath href={`#${botId}`} startOffset="50%">
+          {bottom}
+        </textPath>
+      </text>
+      <path d={starPath(C - mx, C, bw * 0.2)} />
+      <path d={starPath(C + mx, C, bw * 0.2)} />
+    </g>
+  ) : undefined;
+  const defs = (
     <>
-      <rect width="200" height="200" fill="#fff" />
-      {labels && (
-        <g className="ip-stamp__ko">
-          <text fontSize={topSize} letterSpacing={`${tracking * 0.8}em`} textAnchor="middle">
-            <textPath href={`#${topId}`} startOffset="50%">
-              {top}
-            </textPath>
-          </text>
-          <text fontSize={bottomSize} letterSpacing={`${tracking * 0.8}em`} textAnchor="middle">
-            <textPath href={`#${botId}`} startOffset="50%">
-              {bottom}
-            </textPath>
-          </text>
-          <path d={starPath(C - mx, C, bw * 0.2)} />
-          <path d={starPath(C + mx, C, bw * 0.2)} />
-        </g>
-      )}
+      <path id={topId} d={arcTop(mx - topSize * 0.35)} />
+      <path id={botId} d={arcBottom(mx + bottomSize * 0.35)} />
     </>
   );
 
@@ -496,19 +485,11 @@ function drawSeal(ctx: DrawContext): Drawn {
     </>
   );
 
-  const marks = (
-    <>
-      <defs>
-        <path id={topId} d={arcTop(mx - topSize * 0.35)} />
-        <path id={botId} d={arcBottom(mx + bottomSize * 0.35)} />
-      </defs>
-      {showDate && (
-        <text className="ip-stamp__mono" x={C} y={C + ix * 0.7} fontSize={7.4} letterSpacing="0.1em" textAnchor="middle">
-          {formatStampDate(tpl.date)}
-        </text>
-      )}
-    </>
-  );
+  const marks = showDate ? (
+    <text className="ip-stamp__mono" x={C} y={C + ix * 0.7} fontSize={7.4} letterSpacing="0.1em" textAnchor="middle">
+      {formatStampDate(tpl.date)}
+    </text>
+  ) : null;
 
   // Each foil shape is drawn twice: a soft dark offset first, so the metal reads as embossed and
   // its pale highlights never dissolve into cream paper.
@@ -532,7 +513,7 @@ function drawSeal(ctx: DrawContext): Drawn {
   );
 
   const art: ArtBox = showDate ? { cx: C, cy: C - 8, size: 64 } : { cx: C, cy: C, size: 76 };
-  return { mask, frame, marks, foil, art };
+  return { ko, defs, frame, marks, foil, art };
 }
 
 /* --- Empty slot ------------------------------------------------------ */
@@ -546,8 +527,8 @@ function drawEmpty(ctx: DrawContext, label: string): Drawn {
       {outline(shape, {
         fill: "none",
         stroke: "currentColor",
-        strokeWidth: compact ? 3 : 1.9,
-        strokeDasharray: compact ? "6 8" : "4.5 6.5",
+        strokeWidth: compact ? 2 : 1.4,
+        strokeDasharray: compact ? "5 8" : "4 6.5",
         strokeLinecap: "round",
         strokeLinejoin: "round",
       })}
@@ -560,7 +541,8 @@ function drawEmpty(ctx: DrawContext, label: string): Drawn {
   const firstY = baseY - (lines.length - 1) * 10;
   const marks =
     labels && lines.length > 0 ? (
-      <g className="ip-stamp__mono" textAnchor="middle">
+      // Words to read, so not as faint as the ghost outline: the paper ink at 70% (TEC-9).
+      <g className="ip-stamp__mono" textAnchor="middle" style={{ color: "color-mix(in srgb, var(--paper-ink) 70%, transparent)" }}>
         {lines.map((line, i) => (
           <text key={line} className="ip-stamp__mono" x={C} y={firstY + i * 10.5} fontSize={7.8} letterSpacing="0.18em">
             {line}
@@ -571,13 +553,56 @@ function drawEmpty(ctx: DrawContext, label: string): Drawn {
   const size = shape === "oval" ? 78 : shape === "rounded" ? 84 : 88;
   const hasText = labels && lines.length > 0;
   const art: ArtBox = { cx: C, cy: hasText ? C - (shape === "oval" ? 13 : 12) : C, size: hasText ? size : size + 14 };
-  return { frame, marks, art, artOpacity: 0.42 };
+  // A ghost: clearly lighter than any printed status, the pending one included (STM-7).
+  return { frame, marks, art, artOpacity: 0.35, frameOpacity: 0.55 };
 }
 
-/* --- Ink filter ------------------------------------------------------ */
+/* --- Pending clock badge ---------------------------------------------- */
+
+/**
+ * The "Donation pending" mark: a solid disc of ink with the clock showing through as paper. It
+ * mirrors the foil seal of a Verified stamp in weight and position. Drawn around the origin.
+ * The class name and the <g> are relied on by the donate and upgrade animations.
+ */
+function PendingBadge({ id, r, withText }: { id: string; r: number; withText: boolean }) {
+  const k = r / 25;
+  const clock = withText ? 8.6 * k : 13 * k;
+  const line = (withText ? 2.2 : 2.9) * k;
+  const maskId = `${id}-pm`;
+  const pad = r + 3;
+  return (
+    <g className="ip-stamp__pendingmark" data-solid="">
+      <mask id={maskId} maskUnits="userSpaceOnUse" x={-pad} y={-pad} width={pad * 2} height={pad * 2}>
+        <rect x={-pad} y={-pad} width={pad * 2} height={pad * 2} fill="#fff" />
+        <g fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round">
+          {withText && (
+            <g className="ip-stamp__ko">
+              <path id={`${id}-pt`} d={circlePath(r * 0.64)} fill="none" stroke="none" />
+              <text fontSize={r * 0.235} textLength={2 * Math.PI * r * 0.64 * 0.96} lengthAdjust="spacing">
+                <textPath href={`#${id}-pt`} startOffset="0">
+                  {`${strings.status.pending.tab.split(" ").join(" · ")} ·`}
+                </textPath>
+              </text>
+            </g>
+          )}
+          <circle r={clock} strokeWidth={line} />
+          <path d={`M 0 ${-clock * 0.56} V 0 L ${clock * 0.4} ${clock * 0.25}`} strokeWidth={line} />
+        </g>
+      </mask>
+      <circle r={r} fill="currentColor" mask={`url(#${maskId})`} />
+    </g>
+  );
+}
+
+/* --- Ink filters ------------------------------------------------------ */
 
 const REVEAL_SLOPE = 7;
 const REVEAL_DONE = "0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0 1";
+/** Lettering wobbles this much of the frame's displacement, and not at all below TEXT_ROUGH_FROM px. */
+const TEXT_ROUGH = 0.4;
+const TEXT_ROUGH_FROM = 160;
+/** Margin round the 200-unit box that the in-SVG filters and masks cover. */
+const BLEED = 16;
 
 function revealMatrix(p: number): string {
   if (p >= 1) return REVEAL_DONE;
@@ -600,42 +625,67 @@ interface InkFilterProps {
   reveal: boolean;
   progress: number;
   revealRef: React.Ref<SVGFEColorMatrixElement>;
+  /** Also define the lighter rough edge for lettering. */
+  textRough: boolean;
 }
 
-function InkFilter({ id, seed, size, status, tok, reveal, progress, revealRef }: InkFilterProps) {
-  const k = size / 200; // CSS px per stamp unit: the filter works in px
-  const rough = tok.impression.rough * (status === "pending" ? 1.15 : 1);
-  const speckle = clamp(tok.impression.speckle + (status === "pending" ? 0.1 : status === "verified" ? -0.2 : 0), 0, 1);
+/**
+ * Four filters, one impression:
+ *   {id}-f   on the whole ink layer (CSS px): dry speckle, density variation and the press reveal
+ *   {id}-dx  on the frame group inside the SVG (stamp units): the rough, wobbly edge
+ *   {id}-da  on the artwork wrapper (CSS px): the same rough edge
+ *   {id}-dt  on the lettering (stamp units): 40% of that wobble, large stamps only
+ * The edge noise has the same seed and the same frequency in all three, so frame and artwork
+ * still look like one rubber die.
+ */
+function InkFilter({ id, seed, size, status, tok, reveal, progress, revealRef, textRough }: InkFilterProps) {
+  const k = size / 200; // CSS px per stamp unit
+  const rough = tok.impression.rough;
+  const speckle = clamp(tok.impression.speckle + (status === "verified" ? -0.2 : 0), 0, 1);
   const edgeF = round2(clamp(0.26 / k, 0.05, 0.9));
+  const edgeU = Number((edgeF * k).toFixed(4));
   const grainF = round2(clamp(0.5 / Math.sqrt(k), 0.1, 1.2));
   const blotchF = Number(clamp(0.021 / k, 0.004, 0.2).toFixed(4));
-  const displace = round2(rough * k * 1.2);
   const grainThreshold = 0.745 - 0.3 * speckle;
   const grainSlope = 6.5;
   // Density variation: how far the lightest patches drop.
-  const [blotchSlope, blotchOffset] =
-    status === "verified" ? [0.8, 1.38] : status === "pending" ? [1.5, 1.55] : [1.2, 1.5];
+  const [blotchSlope, blotchOffset] = status === "verified" ? [0.8, 1.38] : [1.2, 1.5];
   const alphaRow = (slope: number, offset: number) =>
     `0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 ${round2(-slope)} ${round2(offset)}`;
+  const unitRegion = { filterUnits: "userSpaceOnUse" as const, x: -BLEED, y: -BLEED, width: 200 + BLEED * 2, height: 200 + BLEED * 2 };
 
   return (
-    <filter id={id} x="-8%" y="-8%" width="116%" height="116%" colorInterpolationFilters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency={edgeF} numOctaves="2" seed={seed} result="edge" />
-      <feDisplacementMap in="SourceGraphic" in2="edge" scale={displace} xChannelSelector="R" yChannelSelector="G" result="rough" />
-      <feTurbulence type="fractalNoise" baseFrequency={grainF} numOctaves="2" seed={seed + 3} result="grainNoise" />
-      <feColorMatrix in="grainNoise" type="matrix" values={alphaRow(grainSlope, grainSlope * grainThreshold + 0.5)} result="grain" />
-      <feTurbulence type="fractalNoise" baseFrequency={blotchF} numOctaves="2" seed={seed + 7} result="blotchNoise" />
-      <feColorMatrix in="blotchNoise" type="matrix" values={alphaRow(blotchSlope, blotchOffset)} result="blotch" />
-      <feComposite in="rough" in2="grain" operator="in" result="speckled" />
-      <feComposite in="speckled" in2="blotch" operator="in" result="inked" />
-      {reveal && (
-        <>
-          <feTurbulence type="fractalNoise" baseFrequency={Number(clamp(0.05 / k, 0.008, 0.4).toFixed(4))} numOctaves="3" seed={seed + 11} result="revealNoise" />
-          <feColorMatrix ref={revealRef} in="revealNoise" type="matrix" values={revealMatrix(progress)} result="revealMask" />
-          <feComposite in="inked" in2="revealMask" operator="in" />
-        </>
+    <>
+      <filter id={`${id}-f`} x="-8%" y="-8%" width="116%" height="116%" colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency={grainF} numOctaves="2" seed={seed + 3} result="grainNoise" />
+        <feColorMatrix in="grainNoise" type="matrix" values={alphaRow(grainSlope, grainSlope * grainThreshold + 0.5)} result="grain" />
+        <feTurbulence type="fractalNoise" baseFrequency={blotchF} numOctaves="2" seed={seed + 7} result="blotchNoise" />
+        <feColorMatrix in="blotchNoise" type="matrix" values={alphaRow(blotchSlope, blotchOffset)} result="blotch" />
+        <feComposite in="SourceGraphic" in2="grain" operator="in" result="speckled" />
+        <feComposite in="speckled" in2="blotch" operator="in" result="inked" />
+        {reveal && (
+          <>
+            <feTurbulence type="fractalNoise" baseFrequency={Number(clamp(0.05 / k, 0.008, 0.4).toFixed(4))} numOctaves="3" seed={seed + 11} result="revealNoise" />
+            <feColorMatrix ref={revealRef} in="revealNoise" type="matrix" values={revealMatrix(progress)} result="revealMask" />
+            <feComposite in="inked" in2="revealMask" operator="in" />
+          </>
+        )}
+      </filter>
+      <filter id={`${id}-da`} x="-8%" y="-8%" width="116%" height="116%" colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency={edgeF} numOctaves="2" seed={seed} result="edge" />
+        <feDisplacementMap in="SourceGraphic" in2="edge" scale={round2(rough * k * 1.2)} xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+      <filter id={`${id}-dx`} {...unitRegion} colorInterpolationFilters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency={edgeU} numOctaves="2" seed={seed} result="edge" />
+        <feDisplacementMap in="SourceGraphic" in2="edge" scale={round2(rough * 1.2)} xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+      {textRough && (
+        <filter id={`${id}-dt`} {...unitRegion} colorInterpolationFilters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency={edgeU} numOctaves="2" seed={seed} result="edge" />
+          <feDisplacementMap in="SourceGraphic" in2="edge" scale={round2(rough * 1.2 * TEXT_ROUGH)} xChannelSelector="R" yChannelSelector="G" />
+        </filter>
       )}
-    </filter>
+    </>
   );
 }
 
@@ -643,10 +693,13 @@ function InkFilter({ id, seed, size, status, tok, reveal, progress, revealRef }:
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
+const BLEED_BOX = { x: -BLEED, y: -BLEED, width: 200 + BLEED * 2, height: 200 + BLEED * 2 };
+const MASK_BOX = { maskUnits: "userSpaceOnUse" as const, ...BLEED_BOX };
+
 const isSource = (v: unknown): v is ProgressSource =>
   typeof v === "object" && v !== null && typeof (v as ProgressSource).get === "function" && typeof (v as ProgressSource).on === "function";
 
-const INK_OPACITY: Record<StampStatus, number> = { discovery: 0.92, pending: 0.8, verified: 0.97 };
+const INK_OPACITY: Record<StampStatus, number> = { discovery: 0.92, pending: 0.95, verified: 0.97 };
 
 export function Stamp({
   stamp,
@@ -725,8 +778,11 @@ export function Stamp({
   const inkVar = isEmpty ? "var(--ink-empty)" : provincial ? "var(--ink-provincial)" : `var(--ink-${status})`;
   const art = drawn.art;
   const url = artUrl(tpl.art);
-  const maskId = `${id}-m`;
   const filterId = `${id}-f`;
+  // Lettering: a light wobble on large stamps, none on small ones (see the header comment).
+  const textRough = useFilter && size >= TEXT_ROUGH_FROM;
+  const roughFilter = useFilter ? `url(#${id}-dx)` : undefined;
+  const textFilter = textRough ? `url(#${id}-dt)` : undefined;
 
   const label = decorative ? undefined : ariaLabel(tpl, status, isEmpty, provincial);
 
@@ -757,7 +813,7 @@ export function Stamp({
         <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true" focusable="false">
           <defs>
             <InkFilter
-              id={filterId}
+              id={id}
               seed={seed}
               size={size}
               status={provincial ? "verified" : status}
@@ -765,6 +821,7 @@ export function Stamp({
               reveal={needsReveal}
               progress={initialProgress}
               revealRef={revealRef}
+              textRough={textRough}
             />
           </defs>
         </svg>
@@ -779,33 +836,52 @@ export function Stamp({
           }}
         >
           <svg className="ip-stamp__svg" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
-            {drawn.mask && (
-              <defs>
-                <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200">
-                  {drawn.mask}
+            <defs>
+              {drawn.defs}
+              {drawn.hole && (
+                <mask id={`${id}-mh`} {...MASK_BOX}>
+                  <rect {...BLEED_BOX} fill="#fff" />
+                  {drawn.hole}
                 </mask>
-              </defs>
-            )}
-            <g mask={drawn.mask ? `url(#${maskId})` : undefined}>{drawn.frame}</g>
-            {drawn.marks}
-            {showPendingMark && (
-              <g transform={`translate(${anchor.x} ${anchor.y})`}>
-                <PendingMark id={id} r={PENDING_R} withText={withMarkText} />
+              )}
+              {drawn.ko && (
+                <mask id={`${id}-mk`} {...MASK_BOX}>
+                  <rect {...BLEED_BOX} fill="#fff" />
+                  <g className="ip-stamp__disp" filter={textFilter}>
+                    {drawn.ko}
+                  </g>
+                </mask>
+              )}
+            </defs>
+            {/* Knock-out lettering is cut after the rough edge, so the wobble never closes it up. */}
+            <g mask={drawn.ko ? `url(#${id}-mk)` : undefined}>
+              <g className="ip-stamp__disp" filter={roughFilter} opacity={drawn.frameOpacity}>
+                <g mask={drawn.hole ? `url(#${id}-mh)` : undefined}>{drawn.frame}</g>
+                {showPendingMark && (
+                  <g transform={`translate(${anchor.x} ${anchor.y})`}>
+                    <PendingBadge id={id} r={PENDING_R} withText={withMarkText} />
+                  </g>
+                )}
               </g>
-            )}
+            </g>
+            <g className="ip-stamp__disp" filter={textFilter}>
+              {drawn.marks}
+            </g>
           </svg>
-          <div
-            className="ip-stamp__art"
-            style={{
-              left: `${(art.cx - art.size / 2) / 2}%`,
-              top: `${(art.cy - art.size / 2) / 2}%`,
-              width: `${art.size / 2}%`,
-              height: `${art.size / 2}%`,
-              opacity: drawn.artOpacity,
-              WebkitMaskImage: maskImage,
-              maskImage,
-            }}
-          />
+          <div className="ip-stamp__rough" style={useFilter ? { filter: `url(#${id}-da)` } : undefined}>
+            <div
+              className="ip-stamp__art"
+              style={{
+                left: `${(art.cx - art.size / 2) / 2}%`,
+                top: `${(art.cy - art.size / 2) / 2}%`,
+                width: `${art.size / 2}%`,
+                height: `${art.size / 2}%`,
+                opacity: drawn.artOpacity,
+                WebkitMaskImage: maskImage,
+                maskImage,
+              }}
+            />
+          </div>
         </div>
         {(drawn.foil || showVerifiedSeal) && (
           <svg
