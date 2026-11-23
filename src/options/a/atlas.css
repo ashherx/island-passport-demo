@@ -5,9 +5,14 @@
  * Layout is decided by media queries (not by script), so the first HTML already has the right
  * shape on a phone and on a desktop. 900px matches WIDE_QUERY in hooks.ts.
  *
+ * Layouts. The landing has several arrangements (data-layout on the root, see ./layouts). This
+ * file holds everything they share and the "split" arrangement, which is the base; each other
+ * layout has its own stylesheet (layouts/horizon.css, orb.css, fullbleed.css) that restates what it moves, scoped under
+ * .da[data-layout="<id>"].
+ *
  * Layers (z-index)
  *   0  sky            1  globe          20  photo stage     30  landing rail
- *   35 brand bar      40 island card    45  action bar      50  search
+ *   35 brand bar      40 island card    45  action bar      50  search      60  layout switcher
  *
  * Numbers shared with index.tsx: sheet head 118px (grab 20 + head 98), tab row 54px, action bar 76px,
  * search 52px at 10px from the top, landing rail 136px, side panel 448px wide at 24px.
@@ -173,21 +178,79 @@
 }
 
 /* The server cannot know the window is wide, so its HTML frames the globe for a phone. Until the
-   script takes over, place the poster where the desktop layout will have it (index.tsx: padding). */
+   script takes over, place the poster where the split layout will have it on a wide screen
+   (layouts/split.tsx: home and islandPadding). The globe starts where the words column ends and
+   is never drawn under 520px across: a window narrower than about 1000px crops it at the right. */
 @media (min-width: 900px) {
-  .da:not([data-hydrated]) .ipg-stage {
-    --ipg-pad-l: clamp(560px, 46vw, 720px) !important;
+  .da[data-layout="split"]:not([data-hydrated]) .ipg-stage {
+    --ipg-pad-l: min(720px, max(46vw, min(560px, calc(84px + min(500px, 39vw))))) !important;
     --ipg-pad-t: 24px !important;
     --ipg-pad-r: 0px !important;
     --ipg-pad-b: 24px !important;
-    --ipg-size: 1 !important;
+    --ipg-d: max(min(var(--ipg-free-w), var(--ipg-free-h)), min(520px, var(--ipg-free-h)));
   }
-  .da:not([data-hydrated]):not([data-phase="idle"]) .ipg-stage {
+  .da[data-layout="split"]:not([data-hydrated]):not([data-phase="idle"]) .ipg-stage {
     --ipg-pad-l: 496px !important;
     --ipg-pad-t: 28px !important;
     --ipg-pad-r: 24px !important;
     --ipg-pad-b: 28px !important;
+    --ipg-d: min(var(--ipg-free-w), var(--ipg-free-h));
   }
+}
+
+/* Between a phone and a wide screen (600 to 899px) the stacked landing's globe depends on how the
+   headline wraps, which only the script can measure. Rather than paint it at a phone's size and
+   let it jump, the poster waits for the script there and fades in at its real size. */
+@media (min-width: 600px) and (max-width: 899.98px) {
+  .da[data-layout="split"]:not([data-hydrated]) .ipg-stage > :not(.ipg-map) {
+    opacity: 0;
+  }
+  .da[data-layout="split"] .ipg-poster,
+  .da[data-layout="split"] .ipg-halo {
+    transition: opacity 0.4s ease;
+  }
+}
+
+/* The visitor's own layout (stored from an earlier visit, stamped on <html> by the boot script)
+   is not the one the server rendered: stay invisible for the instant it takes React to swap. */
+html[data-layout="split"] .da:not([data-layout="split"]),
+html[data-layout="horizon"] .da:not([data-layout="horizon"]),
+html[data-layout="orb"] .da:not([data-layout="orb"]),
+html[data-layout="fullbleed"] .da:not([data-layout="fullbleed"]) {
+  visibility: hidden;
+}
+
+/* A switch of layout: the camera cuts to the new frame and the globe fades back in. */
+.da .da-globe {
+  transition: opacity 0.5s ease;
+}
+
+.da[data-switching] .da-globe {
+  opacity: 0;
+  transition: none;
+}
+
+/* A thin veil of haze, centred on where the island lands. It only appears when the camera arrives
+   before the last map tiles do: it covers the moment the island is still drawn from coarse tiles
+   and clears as it comes into focus (index.tsx: onArrive, tiles.ts). */
+.da-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle at var(--globe-x) var(--globe-y),
+    rgba(233, 244, 252, 0.72) 0%,
+    rgba(233, 244, 252, 0.56) 26%,
+    rgba(233, 244, 252, 0.2) 54%,
+    rgba(233, 244, 252, 0) 78%
+  );
+  transition: opacity 0.6s ease;
+}
+
+.da[data-veil] .da-veil {
+  opacity: 1;
+  transition: opacity 0.28s ease-out;
 }
 
 .da-globe[data-space="false"] .da-depth,
@@ -198,7 +261,9 @@
 .da-globe .ipg-credit {
   font-size: 9.5px;
   letter-spacing: 0.02em;
-  transition: bottom 0.5s var(--da-ease);
+  transition:
+    bottom 0.5s var(--da-ease),
+    opacity 0.3s ease;
 }
 
 /* On the landing the credits sit in the bottom row, beside the option switcher; during the
@@ -254,6 +319,17 @@
     transform: scale(1.5);
     opacity: 0;
   }
+}
+
+/* At globe scale the islands' markers overlap (Siargao's sits on Bohol's). A participating
+   island's marker stays on top and takes the tap; a coming-soon marker lets the tap through to
+   the map, which picks the island nearest the finger. It is still a button for the keyboard. */
+.da .ipg-marker[data-live="true"] {
+  z-index: 2;
+}
+
+.da .ipg-marker[data-live="false"] {
+  pointer-events: none;
 }
 
 .ipg-marker[data-near="true"] .da-beacon,
@@ -670,6 +746,18 @@
   transition:
     opacity 0.35s ease,
     transform 0.6s var(--da-ease);
+  /* The entrance (da-enter) starts part visible and holds on to opacity. With an island open it
+     must not play at all: a layout switched with a card open, or a shared link to an island,
+     would otherwise show the chips for the length of the entrance. */
+  animation: none;
+}
+
+/* Phones: back from an island, the chips wait until the globe is nearly home (the wide screen's
+   rule is further down). An animation, because the entrance above would override a transition. */
+@media (max-width: 899.98px) {
+  .da[data-returned][data-phase="idle"] .da-rail {
+    animation: da-return 0.9s var(--da-ease) 1.1s both;
+  }
 }
 
 .da-hint {
@@ -1128,6 +1216,23 @@
   pointer-events: none;
 }
 
+/* The narrow rendition of the photo, over its blurred preview and under the scrim. It is fetched
+   the moment an island is chosen (photos.ts), so it is what the card lands with when the sharp
+   photo is still on its way; it goes once the sharp one, under it, has faded in. No fade of its
+   own on the way in: it paints as soon as it is decoded. */
+.da-hero-lo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: opacity 0.3s ease 0.45s;
+}
+
+.da-hero .ipp[data-loaded] ~ .da-hero-lo {
+  opacity: 0;
+}
+
 /* Three figures at a glance, on the photo. */
 .da-glance {
   position: absolute;
@@ -1241,13 +1346,11 @@
   stroke: var(--da-sea-ink);
 }
 
-/* Content that staggers in when the card opens. */
-.da-rise {
-  opacity: 0;
-}
-
+/* Content that staggers in when the card opens. It is visible by default and only starts from
+   nothing while its animation is waiting or running, so a card that is shown some other way (the
+   sheet pulled up mid-flight, an animation the browser skipped) never has a blank photo area. */
 .da[data-phase="landed"] .da-rise {
-  animation: da-rise 0.85s var(--da-ease) both;
+  animation: da-rise 0.85s var(--da-ease) backwards;
   animation-delay: calc(var(--i, 0) * 80ms + 140ms);
 }
 
@@ -1255,10 +1358,6 @@
   from {
     opacity: 0;
     transform: translateY(18px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
   }
 }
 
@@ -2746,6 +2845,12 @@
     margin-bottom: 26px;
   }
 
+  /* The column jumps to the docked search's place the moment an island is chosen. The words go
+     at once: they would otherwise re-wrap in that narrow column, over the globe, while they fade. */
+  .da[data-layout="split"]:not([data-phase="idle"]) .da-intro {
+    visibility: hidden;
+  }
+
   .da-intro-content {
     padding: 0;
   }
@@ -3096,6 +3201,238 @@
   }
 }
 
+/* ========================================================= layout switcher */
+
+/* The floating "Layout" pill (LayoutSwitcher.tsx), top right. Under 1280px it is a compact button
+   that opens the list, so it clears the wordmark on a phone and the docked search on a narrow
+   desktop; from 1280px the layouts are shown side by side (four of them are about 400px wide,
+   which a docked search only clears from there). The shell hides it on a phone while a
+   card is open, so it never sits on the card or its tabs. */
+.da-lay {
+  position: absolute;
+  z-index: 60;
+  right: calc(12px + env(safe-area-inset-right, 0px));
+  top: calc(11px + var(--da-safe-t));
+  font-size: 12.5px;
+  line-height: 1;
+  transition:
+    opacity 0.3s ease,
+    transform 0.45s var(--da-ease);
+}
+
+.da-lay[data-hidden] {
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+/* A phone hides the pill while a card is open. It comes back late, once the docked search has
+   left the top edge again. */
+@media (max-width: 899.98px) {
+  .da-lay {
+    transition:
+      opacity 0.4s ease 1.75s,
+      transform 0.5s var(--da-ease) 1.75s,
+      visibility 0s linear 1.75s;
+  }
+  .da-lay[data-hidden] {
+    visibility: hidden;
+    transition:
+      opacity 0.25s ease,
+      transform 0.4s var(--da-ease),
+      visibility 0s linear 0.3s;
+  }
+}
+
+.da-lay-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px 0 9px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+  box-shadow:
+    0 0 0 1px rgba(18, 41, 58, 0.06),
+    0 4px 14px rgba(28, 86, 130, 0.1);
+  color: var(--da-ink-2);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* A finger-sized target around the small pill. */
+.da-lay-toggle {
+  position: relative;
+}
+
+.da-lay-toggle::after {
+  content: "";
+  position: absolute;
+  inset: -7px -4px;
+}
+
+.da-lay-toggle svg,
+.da-lay-item svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  color: var(--da-sea-deep);
+}
+
+.da-lay-toggle .da-lay-caret {
+  width: 9px;
+  height: 9px;
+  color: var(--da-muted);
+  transition: transform 0.3s var(--da-ease);
+}
+
+.da-lay[data-open] .da-lay-caret {
+  transform: rotate(180deg);
+}
+
+.da-lay-group {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  display: none;
+  flex-direction: column;
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow:
+    0 0 0 1px rgba(18, 41, 58, 0.06),
+    0 2px 6px rgba(18, 60, 90, 0.06),
+    0 20px 48px rgba(28, 86, 130, 0.22);
+  transform-origin: top right;
+}
+
+.da-lay[data-open] .da-lay-group {
+  display: flex;
+  animation: da-list-in 0.22s var(--da-ease) both;
+}
+
+.da-lay-cap {
+  padding: 8px 10px 5px;
+  color: var(--da-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.da-lay-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 44px;
+  padding: 0 14px 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--da-ink-2);
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s;
+}
+
+.da-lay-item[aria-checked="true"] {
+  background: var(--da-sea-soft);
+  color: var(--da-ink);
+}
+
+/* A layout with a longer name shows it in the list and a short one in the wide pill (below). */
+.da-lay-short {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .da-lay {
+    right: 20px;
+    top: 22px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .da-lay-toggle {
+    display: none;
+  }
+
+  .da-lay-group,
+  .da-lay[data-open] .da-lay-group {
+    position: static;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.7);
+    -webkit-backdrop-filter: blur(10px) saturate(1.4);
+    backdrop-filter: blur(10px) saturate(1.4);
+    box-shadow:
+      0 0 0 1px rgba(18, 41, 58, 0.06),
+      0 4px 14px rgba(28, 86, 130, 0.1);
+    animation: none;
+  }
+
+  .da-lay-cap {
+    padding: 0 6px 0 10px;
+  }
+
+  .da-lay-item {
+    gap: 6px;
+    height: 30px;
+    padding: 0 12px 0 9px;
+    border-radius: 999px;
+    font-size: 12.5px;
+  }
+
+  .da-lay-item[aria-checked="true"] {
+    background: var(--da-ink);
+    color: #fff;
+  }
+
+  /* Still read out in full: only its box goes. */
+  .da-lay-full {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .da-lay-short {
+    display: inline;
+  }
+
+  .da-lay-item[aria-checked="true"] svg {
+    color: #fff;
+  }
+}
+
+@media (hover: hover) {
+  .da-lay-toggle:hover {
+    background: rgba(255, 255, 255, 0.95);
+  }
+  .da-lay-item:hover:not([aria-checked="true"]) {
+    background: rgba(18, 41, 58, 0.06);
+    color: var(--da-ink);
+  }
+}
+
 /* ========================================================= reduced motion */
 
 @media (prefers-reduced-motion: reduce) {
@@ -3118,5 +3455,31 @@
   .da-section {
     opacity: 1;
     transform: none;
+  }
+
+  /* No flight: the map cuts to the island and back. A short cross-fade of the globe stands in
+     for the journey (index.tsx flips data-cut on every change of island). */
+  .da[data-cut="0"] .da-globe {
+    animation: da-cut-a 0.45s ease both !important;
+    animation-duration: 0.45s !important;
+  }
+  .da[data-cut="1"] .da-globe {
+    animation: da-cut-b 0.45s ease both !important;
+    animation-duration: 0.45s !important;
+  }
+  .da .da-veil {
+    display: none;
+  }
+}
+
+@keyframes da-cut-a {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes da-cut-b {
+  from {
+    opacity: 0;
   }
 }

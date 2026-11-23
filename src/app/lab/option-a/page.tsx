@@ -4,8 +4,9 @@ import { OptionProvider } from "@/lib/options";
 import { OptionALab } from "@/options/a/Lab";
 
 /**
- * /lab/option-a: option A ("Daylight Atlas") mounted directly, without the A · B · C switcher.
- * `?island=bohol` opens an island, as on the home page. Notes: docs/agents/v2-option-a.md
+ * /lab/option-a: option A ("Daylight Atlas") mounted directly, without the registry of options.
+ * `?island=bohol` opens an island and `?layout=split|horizon|orb|fullbleed` picks the layout, as on the home
+ * page. Notes: docs/agents/v2-option-a.md and docs/agents/v2-layouts.md
  */
 export const metadata: Metadata = { title: "Option A: Daylight Atlas" };
 

@@ -13,3 +13,4 @@ export {
   type OptionId,
   type OptionPalette,
 } from "./types";
+export { DEFAULT_LAYOUT, LAYOUT_IDS, LAYOUT_QUERY, LAYOUT_STORAGE_KEY, THEMES_QUERY, isLayoutId, type LayoutId } from "./layouts";

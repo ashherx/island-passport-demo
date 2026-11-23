@@ -16,7 +16,7 @@
  * The emblem is an original mark (compass ring, three hills, sun, waves). It is not a coat of
  * arms and the cover does not imitate a government passport.
  */
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { useDirectionTokens } from "@/components/theme";
 import { strings, t } from "@/lib/strings";
 import { Frame } from "./PageFrame";
@@ -342,6 +342,12 @@ export interface CoverProps {
   pageEdge?: boolean;
   initialWidth?: number;
   className?: string;
+  /**
+   * Front cover only. The live globe window with its lettering and partner strip (see
+   * src/components/passport/cover-globe). It takes the place of the emblem and of the lines under
+   * it; the title stays. Without it the cover is the printed one, exactly as before.
+   */
+  globe?: ReactNode;
 }
 
 /* ------------------------------------------------------------------ */
@@ -357,11 +363,13 @@ export function FrontCover({
   pageEdge = false,
   initialWidth,
   className,
+  globe,
 }: CoverProps) {
   const ref = useRef<HTMLDivElement>(null);
   const tokens = useDirectionTokens();
   const material = tokens.cover.material;
   const printed = material === "kraft";
+  const hasGlobe = globe != null;
   useCoverLight(ref, interactive);
 
   return (
@@ -377,8 +385,10 @@ export function FrontCover({
         className="ipp-cover"
         data-face="front"
         data-material={material}
+        data-globe={hasGlobe ? "" : undefined}
         initialWidth={initialWidth}
-        role="img"
+        // With the globe the cover holds controls (the globe, its dots, the partner marks).
+        role={hasGlobe ? "group" : "img"}
         aria-label={t(cs.cover.aria, { province })}
       >
         <div className="ipp-cover__mat mat-cover" aria-hidden="true" />
@@ -403,13 +413,13 @@ export function FrontCover({
                 <span>{cs.cover.labelTraveler}</span>
                 <b>{holderName}</b>
               </div>
-              <div className="ipp-label__line">
+              <div className="ipp-label__line" data-line="no">
                 <span>{cs.cover.labelNo}</span>
                 <b>{passportNo}</b>
               </div>
             </div>
-            <Emblem variant="ink" className="ipp-cover__emblem" />
-            <div className="ipp-cover__imprint">{strings.app.tagline}</div>
+            {!hasGlobe && <Emblem variant="ink" className="ipp-cover__emblem" />}
+            {!hasGlobe && <div className="ipp-cover__imprint">{strings.app.tagline}</div>}
           </div>
         ) : (
           <>
@@ -423,18 +433,25 @@ export function FrontCover({
                 <Foil>{cs.cover.titleLine1}</Foil>
                 <Foil>{cs.cover.titleLine2}</Foil>
               </div>
-              <Emblem variant="foil" className="ipp-cover__emblem" />
-              <div className="ipp-cover__subtitle">
-                <i className="ipp-cover__orn foil-fill" />
-                <Foil>{cs.cover.subtitle}</Foil>
-                <i className="ipp-cover__orn foil-fill" />
-              </div>
-              <div className="ipp-cover__province type-display">
-                <Foil>{province}</Foil>
-              </div>
+              {!hasGlobe && (
+                <>
+                  <Emblem variant="foil" className="ipp-cover__emblem" />
+                  <div className="ipp-cover__subtitle">
+                    <i className="ipp-cover__orn foil-fill" />
+                    <Foil>{cs.cover.subtitle}</Foil>
+                    <i className="ipp-cover__orn foil-fill" />
+                  </div>
+                  <div className="ipp-cover__province type-display">
+                    <Foil>{province}</Foil>
+                  </div>
+                </>
+              )}
             </div>
           </>
         )}
+        {/* Always the child after the body, in every direction: switching direction must not
+            remount the globe (it holds the page's one WebGL context). */}
+        {hasGlobe ? <div className="ipp-cover__globe">{globe}</div> : null}
         <div className="ipp-cover__specular" aria-hidden="true" />
         <div className="mat-sheen ipp-cover__sheen" aria-hidden="true" />
         <div className="ipp-cover__bevel" aria-hidden="true" />

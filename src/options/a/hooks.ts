@@ -58,8 +58,11 @@ export function useViewportWidth(): number {
   );
 }
 
-/** Height of an element, kept up to date. `fallback` is used until it has been measured. */
-export function useHeight(ref: RefObject<HTMLElement | null>, fallback: number): number {
+/**
+ * Height of an element, kept up to date. `fallback` is used until it has been measured.
+ * Pass `key` when the element behind the ref can be replaced (a layout switch remounts it).
+ */
+export function useHeight(ref: RefObject<HTMLElement | null>, fallback: number, key?: string): number {
   const [height, setHeight] = useState(fallback);
   useEffect(() => {
     const el = ref.current;
@@ -70,7 +73,7 @@ export function useHeight(ref: RefObject<HTMLElement | null>, fallback: number):
     const observer = new ResizeObserver(read);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref]);
+  }, [ref, key]);
   return height;
 }
 

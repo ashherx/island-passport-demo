@@ -23,9 +23,11 @@ export interface SearchProps {
   /** Name of the open island, mirrored into the field. Null clears it. */
   current: string | null;
   onFocusChange?(focused: boolean): void;
+  /** A result is highlighted: a chance to fetch that island's map tiles ahead of the flight. */
+  onIntent?(island: GlobeIsland): void;
 }
 
-export const Search = forwardRef<SearchHandle, SearchProps>(function Search({ onSelect, current, onFocusChange }, ref) {
+export const Search = forwardRef<SearchHandle, SearchProps>(function Search({ onSelect, current, onFocusChange, onIntent }, ref) {
   const search = useIslandSearch({ onSelect, limit: 11 });
   const input = useRef<HTMLInputElement>(null);
   const { inputProps, setQuery, setOpen, clear } = search;
@@ -58,6 +60,10 @@ export const Search = forwardRef<SearchHandle, SearchProps>(function Search({ on
   }, [current, setQuery, setOpen, clear]);
 
   const count = search.results.length;
+  const activeIsland = search.open && search.query.trim() ? (search.results[Math.max(0, search.activeIndex)]?.island ?? null) : null;
+  useEffect(() => {
+    if (activeIsland) onIntent?.(activeIsland);
+  }, [activeIsland, onIntent]);
   const firstSoon = search.results.findIndex((r) => r.island.status === "coming-soon");
   const hasLive = search.results.some((r) => r.island.status === "live");
 

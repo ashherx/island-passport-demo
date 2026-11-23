@@ -30,6 +30,8 @@ export interface SheetProps {
   onDismiss(): void;
   /** The card is closing: slide away. */
   leaving: boolean;
+  /** Held below the screen (a layout that shows no card until the camera lands): out of reach of the keyboard too. */
+  inert?: boolean;
   reducedMotion: boolean;
   labelledBy: string;
   children: ReactNode;
@@ -37,7 +39,7 @@ export interface SheetProps {
 
 const SPRING = { type: "spring", stiffness: 190, damping: 24, mass: 0.9 } as const;
 
-export function Sheet({ heights, snaps, snap, onSnap, onDismiss, leaving, reducedMotion, labelledBy, children }: SheetProps) {
+export function Sheet({ heights, snaps, snap, onSnap, onDismiss, leaving, inert = false, reducedMotion, labelledBy, children }: SheetProps) {
   const ref = useRef<HTMLElement>(null);
   const hidden = heights.full + 48;
   const y = useMotionValue(hidden);
@@ -224,6 +226,7 @@ export function Sheet({ heights, snaps, snap, onSnap, onDismiss, leaving, reduce
       data-snap={snap}
       data-largest={snap === largest ? "" : undefined}
       data-leaving={leaving ? "" : undefined}
+      inert={inert ? true : undefined}
       style={{ y, height: heights.full }}
     >
       <button type="button" className="da-grab" data-drag="" onClick={step} aria-label={snap === largest ? aStrings.card.collapse : aStrings.card.expand}>

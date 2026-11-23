@@ -1,0 +1,682 @@
+/*
+ * Layout "horizon" (Dan's sketch 1). Every rule is scoped under .da[data-layout="horizon"].
+ * atlas.css holds the shared pieces and the split arrangement; this file restates what moves.
+ *
+ * Stacked and centred: headline, search, island chips, then a huge globe of which only the top
+ * arc rises from the bottom of the screen. See layouts/horizon.tsx for how the arc is made (a
+ * globe box taller than the screen) and docs/agents/v2-layouts.md for the choreography.
+ *
+ * Geometry. --hz-r (radius of the planet), --hz-top (top of the arc) and --hz-box (height of the
+ * globe's box) mirror horizonGeometry() in horizon.tsx. Here they are in viewport units, so the
+ * first paint is right on any screen before any script runs; once hydrated the shell overrides
+ * them in px from the same numbers the camera uses.
+ */
+
+.da[data-layout="horizon"] {
+  --hz-r: min(95vw, 90vh);
+  --hz-top: 55vh;
+  --hz-box: max(100vh, calc(var(--hz-top) + var(--hz-r) + 40px));
+  --hz-over: calc(var(--hz-box) - 100vh);
+  /* Top inset of the stacked column: under the wordmark on the landing, at the edge when docked. */
+  --hz-inset: calc(50px + var(--da-safe-t));
+  --hz-dock-inset: calc(10px + var(--da-safe-t));
+}
+
+/* The small viewport is what a phone shows on arrival, with the browser's bars in place. */
+@supports (height: 1svh) {
+  .da[data-layout="horizon"] {
+    --hz-r: min(95svw, 90svh);
+    --hz-top: 55svh;
+    --hz-box: max(100svh, calc(var(--hz-top) + var(--hz-r) + 40px));
+    --hz-over: calc(var(--hz-box) - 100svh);
+  }
+}
+
+@media (min-width: 900px) {
+  .da[data-layout="horizon"] {
+    --hz-r: min(58vw, 145vh);
+    --hz-top: 60vh;
+    --hz-inset: 74px;
+    --hz-dock-inset: 20px;
+  }
+}
+
+/* ------------------------------------------------------------------ globe */
+
+/* The box runs past the bottom of the screen; .da clips what is below. */
+.da[data-layout="horizon"] .da-globe {
+  inset: 0 0 auto 0;
+  height: var(--hz-box);
+  --globe-halo: rgba(255, 255, 255, 0.86);
+}
+
+/* The server frames the globe for the phone it assumes. Until the script takes over, frame it
+   from the viewport units above: an 80px strip at the bottom of the box, radius --hz-r. */
+.da[data-layout="horizon"]:not([data-hydrated]) .ipg-stage {
+  --ipg-pad-t: calc(var(--hz-box) - 80px) !important;
+  --ipg-pad-r: 0px !important;
+  --ipg-pad-b: 0px !important;
+  --ipg-pad-l: 0px !important;
+  --ipg-d: calc(var(--hz-r) * 2);
+}
+
+/* The atmosphere along the horizon: a haze just inside the limb, a bright line on it, and a glow
+   that falls away into the sky above. The limb is at 1 / 1.16 = 86.2% of this disc. */
+.da-hz-glow {
+  --k: 1.16;
+  position: absolute;
+  left: calc(var(--globe-x) - var(--globe-r) * var(--k));
+  top: calc(var(--globe-y) - var(--globe-r) * var(--k));
+  width: calc(var(--globe-r) * var(--k) * 2);
+  height: calc(var(--globe-r) * var(--k) * 2);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: calc(1 - var(--globe-t));
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 255, 255, 0) 80%,
+    rgba(255, 255, 255, 0.16) 83.4%,
+    rgba(255, 255, 255, 0.5) 85.6%,
+    rgba(255, 255, 255, 0.96) 86.2%,
+    rgba(232, 245, 255, 0.62) 87.2%,
+    rgba(206, 232, 253, 0.3) 90.5%,
+    rgba(196, 228, 252, 0.1) 95%,
+    rgba(196, 228, 252, 0) 100%
+  );
+}
+
+.da-globe[data-space="false"] .da-hz-glow {
+  display: none;
+}
+
+/* The flight is one move: a touch on the globe must not cut it short. */
+.da[data-layout="horizon"][data-phase="flying"] .da-globe {
+  pointer-events: none;
+}
+
+/* Credits: the bottom of the box is below the screen, so lift them by the hidden part. */
+.da[data-layout="horizon"][data-phase="idle"] .ipg-credit {
+  bottom: calc(var(--hz-over) + 8px + var(--da-safe-b));
+}
+
+/* In flight they stay at the bottom edge (the frame is already the island's, which would float
+   them mid-screen); they move up to sit on the card when it rises. */
+.da[data-layout="horizon"][data-phase="flying"] .ipg-credit {
+  bottom: calc(var(--hz-over) + 8px + var(--da-safe-b));
+}
+
+/* -------------------------------------------------------------- the column */
+
+/* Words, search and chips, centred in the sky above the arc. Two springs (::before and ::after)
+   hold the stack in the middle; when an island is chosen the top one closes and the search rides
+   up to the edge while the words and chips drift up and fade. */
+.da[data-layout="horizon"] .da-top {
+  left: 0;
+  right: 0;
+  top: 0;
+  width: auto;
+  height: var(--hz-top);
+  padding: var(--hz-inset) 12px 0;
+  transform: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: padding-top 0.8s var(--da-ease);
+}
+
+.da[data-layout="horizon"] .da-top::before,
+.da[data-layout="horizon"] .da-top::after {
+  content: "";
+  flex: 1 1 0;
+  min-height: 0;
+  pointer-events: none;
+  transition: flex-grow 0.8s var(--da-ease);
+}
+
+/* A little more air under the stack than over it: the atmosphere needs the room. */
+.da[data-layout="horizon"] .da-top::after {
+  order: 9;
+  flex-grow: 1.5;
+}
+
+.da[data-layout="horizon"]:not([data-phase="idle"]) .da-top {
+  left: 0;
+  top: 0;
+  width: auto;
+  padding-top: var(--hz-dock-inset);
+  transform: none;
+}
+
+.da[data-layout="horizon"]:not([data-phase="idle"]) .da-top::before {
+  flex-grow: 0;
+}
+
+/* Coming back: the search stays docked while the camera climbs, then settles into the column as
+   the horizon does; the words and the chips return last (below). */
+.da[data-layout="horizon"][data-phase="idle"] .da-top,
+.da[data-layout="horizon"][data-phase="idle"] .da-top::before {
+  transition-duration: 1s;
+  transition-delay: 1.15s;
+}
+
+/* The entrance animation (atlas.css: da-enter) must not keep hold of these once it has played,
+   or the phase transitions below would be overridden; and it is the same in every phase, so
+   coming back to the landing does not replay it. */
+.da[data-layout="horizon"] .da-intro-content > *,
+.da[data-layout="horizon"] .da-brand-bar {
+  animation-fill-mode: backwards;
+}
+
+.da[data-layout="horizon"][data-phase] .da-search.da-search {
+  animation: da-enter 0.7s var(--da-ease) 0.14s backwards;
+}
+
+/* The chips enter by position only: their opacity belongs to the phase (a shared link to an
+   island must not show them for the length of the entrance). */
+.da[data-layout="horizon"][data-phase] .da-rail.da-rail {
+  animation: da-hz-rise 0.7s var(--da-ease) 0.22s backwards;
+}
+
+@keyframes da-hz-rise {
+  from {
+    transform: translateY(8px);
+  }
+}
+
+/* The wordmark is a bar in the top left corner on every screen; the column starts under it. */
+.da[data-layout="horizon"] .da-brand-bar {
+  position: absolute;
+  z-index: 35;
+  left: 14px;
+  top: calc(14px + var(--da-safe-t));
+  display: flex;
+  transition: opacity 0.4s ease;
+}
+
+.da[data-layout="horizon"] .da-brand-intro {
+  display: none;
+}
+
+.da[data-layout="horizon"] .da-intro {
+  width: 100%;
+  margin-bottom: 18px;
+  transition:
+    grid-template-rows 0.8s var(--da-ease),
+    margin-bottom 0.8s var(--da-ease),
+    opacity 0.32s ease,
+    transform 0.6s var(--da-ease);
+}
+
+/* The headline drifts up as it fades. */
+.da[data-layout="horizon"]:not([data-phase="idle"]) .da-intro {
+  margin-bottom: 0;
+  transform: translateY(-22px);
+}
+
+.da[data-layout="horizon"][data-phase="idle"] .da-intro {
+  transition:
+    grid-template-rows 1s var(--da-ease) 1.15s,
+    margin-bottom 1s var(--da-ease) 1.15s,
+    opacity 0.7s ease 1.95s,
+    transform 0.9s var(--da-ease) 1.8s;
+}
+
+.da[data-layout="horizon"] .da-intro-content {
+  padding: 0 4px;
+}
+
+/* Three centred lines: the statement, then the promise broken evenly in two. */
+.da[data-layout="horizon"] .da-title {
+  margin: 0;
+  font-size: clamp(32px, 9.6vw, 42px);
+  line-height: 1.03;
+  letter-spacing: -0.014em;
+}
+
+.da[data-layout="horizon"] .da-title em {
+  max-width: 11.2em;
+  margin: 0 auto;
+  text-wrap: balance;
+}
+
+.da[data-layout="horizon"] .da-sub {
+  max-width: 30em;
+  margin: 11px auto 0;
+  font-size: 14.5px;
+}
+
+/* The column is a flex container, so z-index orders its items: the search and its list of
+   results stay above the chips under them. */
+.da[data-layout="horizon"] .da-search {
+  z-index: 3;
+  width: 100%;
+  max-width: 640px;
+  text-align: left;
+  transition: max-width 0.8s var(--da-ease);
+}
+
+.da[data-layout="horizon"][data-phase="idle"] .da-search {
+  transition: max-width 1s var(--da-ease) 1.15s;
+}
+
+/* The chips sit right under the field here: the list of results is fully opaque over them. */
+.da[data-layout="horizon"] .da-search-list {
+  max-height: min(52vh, 420px);
+  background: #fff;
+}
+
+/* Chips in one row under the search, the hint under them. */
+.da[data-layout="horizon"] .da-rail {
+  position: static;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  margin-top: 14px;
+  padding: 0;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-start;
+  transition:
+    opacity 0.7s ease 2.15s,
+    transform 0.9s var(--da-ease) 2.05s;
+}
+
+.da[data-layout="horizon"]:not([data-phase="idle"]) .da-rail {
+  position: static;
+  opacity: 0;
+  transform: translateY(-20px);
+  transition:
+    opacity 0.3s ease,
+    transform 0.6s var(--da-ease);
+}
+
+.da[data-layout="horizon"] .da-chips {
+  align-self: stretch;
+  margin: 0 -12px;
+  padding: 2px 14px 4px;
+}
+
+.da[data-layout="horizon"] .da-hint {
+  justify-content: center;
+  font-size: 12.5px;
+}
+
+/* In place of the card's name plate, which this layout holds back until the camera lands. */
+.da-flight {
+  display: none;
+}
+
+.da[data-layout="horizon"] .da-flight {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--hz-dock-inset) + 52px + 10px);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 5px 12px 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 0 0 1px rgba(18, 41, 58, 0.05),
+    0 6px 18px rgba(28, 86, 130, 0.12);
+  color: var(--da-ink-2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, -8px);
+  pointer-events: none;
+  transition:
+    opacity 0.3s ease,
+    transform 0.5s var(--da-ease);
+}
+
+.da[data-layout="horizon"] .da-flight[data-on] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  transition-delay: 0.35s;
+}
+
+.da[data-layout="horizon"] .da-flight .da-status-dot {
+  animation: da-blink 1.1s ease-in-out infinite;
+}
+
+/* ------------------------------------------------------------- phone only */
+
+@media (max-width: 899.98px) {
+  /* The docked search takes the top edge: the wordmark makes way, and comes back once the
+     search has left again. */
+  .da[data-layout="horizon"] .da-brand-bar {
+    transition: opacity 0.5s ease 1.75s;
+  }
+
+  .da[data-layout="horizon"]:not([data-phase="idle"]) .da-brand-bar {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+
+  .da[data-layout="horizon"] .da-brand-bar .da-brand-name {
+    font-size: 20px;
+  }
+
+  /* A short screen: the line under the headline goes first, then the hint. */
+  @media (max-height: 779px) {
+    .da[data-layout="horizon"] .da-sub {
+      display: none;
+    }
+  }
+
+  @media (max-height: 659px) {
+    .da[data-layout="horizon"] .da-hint {
+      display: none;
+    }
+    .da[data-layout="horizon"] .da-title {
+      font-size: clamp(28px, 8.4vw, 34px);
+    }
+    .da[data-layout="horizon"] .da-intro {
+      margin-bottom: 12px;
+    }
+  }
+}
+
+/* ---------------------------------------------------------------- desktop */
+
+@media (min-width: 900px) {
+  .da[data-layout="horizon"] .da-brand-bar {
+    left: 40px;
+    top: 30px;
+  }
+
+  .da[data-layout="horizon"] .da-top {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .da[data-layout="horizon"] .da-intro {
+    margin-bottom: 26px;
+  }
+
+  .da[data-layout="horizon"] .da-title {
+    font-size: clamp(42px, min(4.9vw, 8vh), 74px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+
+  .da[data-layout="horizon"] .da-sub {
+    margin-top: 16px;
+    font-size: 17px;
+  }
+
+  /* Docked: a smaller pill at the top centre, over the map. */
+  .da[data-layout="horizon"]:not([data-phase="idle"]) .da-top {
+    left: 0;
+    top: 0;
+    width: auto;
+  }
+
+  .da[data-layout="horizon"] .da-search-field {
+    transition:
+      height 0.6s var(--da-ease),
+      box-shadow 0.25s,
+      background 0.25s;
+  }
+
+  .da[data-layout="horizon"]:not([data-phase="idle"]) .da-search {
+    max-width: 360px;
+  }
+
+  .da[data-layout="horizon"] .da-flight {
+    top: calc(var(--hz-dock-inset) + 48px + 10px);
+  }
+
+  .da[data-layout="horizon"] .da-rail {
+    margin-top: 18px;
+    gap: 12px;
+  }
+
+  .da[data-layout="horizon"]:not([data-phase="idle"]) .da-rail {
+    position: static;
+  }
+
+  .da[data-layout="horizon"] .da-chips {
+    justify-content: center;
+    align-self: center;
+    max-width: 860px;
+    margin: 0;
+    padding: 0;
+    gap: 8px;
+  }
+
+  /* The quieter second group starts its own line, without a caption. */
+  .da[data-layout="horizon"] .da-chips .da-chips-label {
+    flex: 0 0 100%;
+    height: 0;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  /* A short window: the second line of islands goes first, then the line under the headline. */
+  @media (max-height: 859px) {
+    .da[data-layout="horizon"] .da-chips li[data-soon],
+    .da[data-layout="horizon"] .da-chips .da-chips-label {
+      display: none;
+    }
+  }
+
+  @media (max-height: 939px) {
+    .da[data-layout="horizon"] .da-sub {
+      display: none;
+    }
+  }
+
+  @media (max-height: 640px) {
+    .da[data-layout="horizon"] .da-hint {
+      display: none;
+    }
+    .da[data-layout="horizon"] .da-intro {
+      margin-bottom: 16px;
+    }
+    .da[data-layout="horizon"] {
+      --hz-inset: 58px;
+    }
+  }
+}
+
+/* ------------------------------------------------------- the docked card */
+
+/* Wide screens: the card is a wide panel along the bottom that rises once the camera has
+   landed. Identity, photo and actions on the left; the six sections scroll beside them. */
+@media (min-width: 900px) {
+  .da-dock {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 20px;
+    width: min(1120px, calc(100% - 48px));
+    height: var(--da-dock-h, 368px);
+    margin: 0 auto;
+    animation: none;
+    opacity: 0;
+    transform: translateY(calc(100% + 44px));
+    transition:
+      transform 0.55s cubic-bezier(0.5, 0, 0.75, 0.3),
+      opacity 0.3s ease 0.2s,
+      height 0.6s var(--da-ease);
+  }
+
+  .da-dock[data-open] {
+    opacity: 1;
+    transform: none;
+    transition:
+      transform 0.95s cubic-bezier(0.18, 0.96, 0.26, 1.02),
+      opacity 0.35s ease,
+      height 0.6s var(--da-ease);
+  }
+
+  .da-dock[data-leaving] {
+    animation: none;
+    opacity: 0;
+    transform: translateY(calc(100% + 44px));
+  }
+
+  .da-dock[data-expanded] {
+    height: min(calc(100% - 104px), 800px);
+  }
+
+  .da-dock .da-panel-inner,
+  .da-dock[data-open] .da-panel-inner {
+    display: grid;
+    grid-template-columns: 396px minmax(0, 1fr);
+    height: 100%;
+    max-height: none;
+    transition: background 0.5s ease;
+  }
+
+  .da-dock-side {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-right: 1px solid var(--da-line);
+  }
+
+  .da-dock .da-head {
+    padding: 16px 20px 14px;
+  }
+
+  .da-dock .da-name {
+    font-size: 40px;
+  }
+
+  .da-dock .da-head-tools {
+    gap: 6px;
+  }
+
+  .da-dock .da-status {
+    flex: none;
+  }
+
+  .da-dock-side .da-hero {
+    flex: 1 1 0;
+    height: auto;
+    min-height: 84px;
+    margin: 0 16px;
+    border-radius: 20px;
+  }
+
+  .da-dock .da-hero-caption {
+    font-size: 19px;
+  }
+
+  /* Pulled up tall, the card covers the map's credits: they step aside rather than peep out. */
+  .da[data-dock="tall"] .ipg-credit {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .da-dock .da-panel-foot {
+    padding: 14px 16px 16px;
+    border-top: 0;
+    background: none;
+  }
+
+  .da-dock .da-dock-main {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(18, 41, 58, 0.2) transparent;
+  }
+
+  .da-dock .da-body {
+    padding: 0 28px 24px;
+  }
+
+  .da-dock .da-tabs {
+    margin: 2px -28px 0;
+  }
+
+  .da-dock .da-tabs-row {
+    padding: 12px 22px 10px;
+  }
+
+  .da-dock .da-tab {
+    padding: 0 13px;
+    font-size: 13.5px;
+  }
+
+  /* The sections have the width for more columns here. */
+  .da-dock .da-facts {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .da-dock .da-stats {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+
+  .da-dock .da-strip,
+  .da-dock .da-species {
+    margin-left: -28px;
+    margin-right: -28px;
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  .da-dock .da-section:first-of-type {
+    padding-top: 12px;
+  }
+
+  /* The expand button: a chevron that turns over when the card is tall. */
+  .da-grow svg {
+    transition: transform 0.4s var(--da-spring);
+  }
+
+  .da-grow[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+
+  /* A coming-soon island has a short card: one column, centred. */
+  .da-dock:not([data-live]) {
+    width: min(560px, calc(100% - 48px));
+    height: auto;
+  }
+
+  .da-dock:not([data-live]) .da-panel-inner,
+  .da-dock:not([data-live])[data-open] .da-panel-inner {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    max-height: min(520px, calc(100vh - 140px));
+  }
+
+  .da-dock:not([data-live]) .da-dock-side {
+    border-right: 0;
+  }
+
+  .da-dock:not([data-live]) .da-soon {
+    padding: 4px 22px 24px;
+  }
+
+  /* Photos take the map area above the card, centred and never wider than 2:1: across the full
+     width the area is a thin strip that crops a photo down to a sliver (a face out of frame). */
+  .da[data-card="dock"] .da-photos {
+    left: 24px;
+    right: 24px;
+    top: 84px;
+    bottom: calc(var(--da-dock-h, 368px) + 20px + 14px);
+    width: min(calc(100% - 48px), calc((100vh - 84px - var(--da-dock-h, 368px) - 34px) * 2));
+    margin: 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .da-dock,
+  .da-dock[data-open] {
+    transition-duration: 0.01s !important;
+  }
+}

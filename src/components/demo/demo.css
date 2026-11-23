@@ -430,6 +430,28 @@ body {
 
 .ipd-hint[data-quiet] {
   opacity: 0;
+  pointer-events: none;
+}
+
+/* The closed passport: the hint row holds the "Open to ..." button of the cover globe. */
+.ipd-hint--cta {
+  overflow: visible;
+}
+
+.ipd-hint--cta[data-quiet] {
+  pointer-events: none;
+}
+
+.ipd-hint__cta {
+  /* The row is 22 to 28px tall depending on the screen; the button never outgrows it by much. */
+  height: min(28px, calc(var(--ipd-hint) + 3px));
+  animation: ipd-hint-in 0.5s var(--ease-out-soft) both;
+}
+
+/* The "©" hangs beside the button without pushing it off centre. */
+.ipd-hint--cta .ipcg-credit {
+  margin-left: -4px;
+  margin-right: -32px;
 }
 
 /* One line, always: a hint that is still too long is cut at the edge instead of wrapping under
@@ -474,6 +496,28 @@ body {
   right: 0;
   bottom: -4px;
   height: 44px;
+}
+
+/* "Close", after the page count: the same hairline separates it. */
+.ipd-hint__close {
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 1px solid var(--line-strong);
+  border-radius: 0;
+  line-height: inherit;
+  text-decoration: none;
+  animation: ipd-hint-in 0.5s var(--ease-out-soft) both;
+}
+
+.ipd-hint__close::after {
+  left: -4px;
+  right: -12px;
+}
+
+@media (hover: hover) {
+  .ipd-hint__close:hover {
+    text-decoration: underline;
+  }
 }
 
 .ipd-hint__btn:focus-visible {

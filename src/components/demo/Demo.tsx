@@ -41,6 +41,15 @@ import { InkSpeckles } from "@/components/moments/stamp-press/InkSpeckles";
 import { StampPressSoundToggle } from "@/components/moments/stamp-press/SoundToggle";
 import type { StatusUpgradeHandle } from "@/components/moments/StatusUpgrade";
 import { getPassportPageMap, usePassportContent, type SlotOverride } from "@/components/passport/content";
+import {
+  CoverGlobeFace,
+  CoverMapCredit,
+  CoverOpenCta,
+  useCoverBook,
+  type CoverBook,
+  type CoverGlobeController,
+  type CoverStop,
+} from "@/components/passport/cover-globe";
 import PassportBook, { type BookState, type PassportBookLibHandle } from "@/components/passport/engine-lib";
 import { ThemeSwitcher, useTheme } from "@/components/theme";
 import {
@@ -295,6 +304,11 @@ interface HintProps {
   onFullMotion(): void;
   pulse: boolean;
   pageCount: number;
+  /** The cover globe's director, and what its "Open to ..." button does. */
+  cover: CoverGlobeController;
+  onOpenCover(): void;
+  /** The open passport: close it (the cover comes back on the island of the page it was closed from). */
+  onCloseBook(): void;
 }
 
 /* Two short lines inside the height the layout reserves for one. demo.css styles `.ipd-hint__btn`
@@ -315,7 +329,7 @@ const HINT_BUTTON: CSSProperties = {
   touchAction: "manipulation",
 };
 
-function Hint({ store, passport, root, open, quiet, motionChoice, onFullMotion, pulse, pageCount }: HintProps) {
+function Hint({ store, passport, root, open, quiet, motionChoice, onFullMotion, pulse, pageCount, cover, onOpenCover, onCloseBook }: HintProps) {
   const page = useSyncExternalStore(store.subscribe, store.get, () => 0);
   const side = useBookAttr(root, "data-side");
   const spread = useBookAttr(root, "data-mode") === "double";
@@ -337,6 +351,21 @@ function Hint({ store, passport, root, open, quiet, motionChoice, onFullMotion, 
     else if (slots.length > 0) hint = D.hintStamp;
     else hint = D.hintSwipe;
   }
+  // The closed passport, face up: the hint is the button that opens it to the globe's island.
+  if (!open && side !== "back") {
+    return (
+      <div className="ipd-hint ipd-hint--cta" aria-hidden={quiet || undefined} data-quiet={quiet ? "" : undefined}>
+        <CoverOpenCta controller={cover} onOpen={onOpenCover} pulse={pulse} className="ipd-hint__cta" />
+        <CoverMapCredit />
+        {motionChoice && !quiet && (
+          // Reduced motion is on: the full motion is offered once, beside the button.
+          <button type="button" className="ipd-hint__btn" style={HINT_BUTTON} title={D.reducedOn} onClick={onFullMotion}>
+            {D.playFull}
+          </button>
+        )}
+      </div>
+    );
+  }
   return (
     <p className="ipd-hint" aria-hidden={quiet || undefined} data-quiet={quiet ? "" : undefined}>
       <span key={hint} className="ipd-hint__text" style={motionChoice ? HINT_CHOICE : undefined}>
@@ -355,6 +384,12 @@ function Hint({ store, passport, root, open, quiet, motionChoice, onFullMotion, 
             : t(D.pageOf, { page: page + 1, total: pageCount })}
         </span>
       )}
+      {open && !quiet && (
+        // Swiping back past the first page closes the book too; this says so in one word.
+        <button type="button" className="ipd-hint__btn ipd-hint__close" onClick={onCloseBook}>
+          {D.close}
+        </button>
+      )}
     </p>
   );
 }
@@ -364,7 +399,7 @@ function Hint({ store, passport, root, open, quiet, motionChoice, onFullMotion, 
 /* ------------------------------------------------------------------ */
 
 export function Demo() {
-  const { tokens } = useTheme();
+  const { tokens, direction } = useTheme();
   const systemReduced = usePrefersReducedMotion();
   /** Reduce Motion is on, and the visitor asked to see the full motion anyway. Never persisted. */
   const [fullMotion, setFullMotion] = useState(false);
@@ -385,6 +420,8 @@ export function Demo() {
   const [inline, setInline] = useState<InlineRun | null>(null);
   const [awardOpen, setAwardOpen] = useState(false);
   const [fresh, setFresh] = useState<string[]>([]);
+  /** Stamps ringed for a moment when the passport opens on their island from the cover globe. */
+  const [arrived, setArrived] = useState<string[]>([]);
   const [notice, setNotice] = useState<NoticeData | null>(null);
   const [moments, setMoments] = useState<Moments | null>(null);
   /** Inside pages are rendered (after idle, or as soon as the cover is touched). */
@@ -428,6 +465,10 @@ export function Demo() {
   const upgradeImpactAt = useRef(0);
   const awardTimer = useRef(0);
   const awardRun = useRef<{ travel: Promise<void> | null; landed: boolean; arrived: boolean } | null>(null);
+  /** The cover globe's wiring (set below, once the book's navigation exists). */
+  const coverRef = useRef<CoverBook | null>(null);
+  const locateRef = useRef<(islandId: string) => void>(() => {});
+  const arrivedTimer = useRef(0);
 
   const setBusy = useCallback((next: Busy) => {
     busyRef.current = next;
@@ -642,7 +683,11 @@ export function Demo() {
       if (!b || !(target >= 0)) return;
       setLive(true);
       if (b.getState() !== "open") {
-        b.open();
+        // A step of the story opens the book: the cover globe's own opening (lens, riffle to its
+        // island) stays out of it. When the visitor opened the cover this is a no-op.
+        const c = coverRef.current;
+        if (c) c.scripted(() => b.open());
+        else b.open();
         // The book reports "open" when its pages can be turned; nothing is added on top of that.
         await waitForState("open", 3600);
         if (reducedRef.current) await wait(80);
@@ -685,6 +730,7 @@ export function Demo() {
   const onFlip = useCallback(
     (index: number) => {
       pageStore.set(index);
+      coverRef.current?.onFlip(index);
       const w = flipWaiter.current;
       if (w && (w.page === index || (isSpread() && Math.floor(w.page / 2) === Math.floor(index / 2)))) w.resolve();
     },
@@ -692,6 +738,8 @@ export function Demo() {
   );
 
   const onStateChange = useCallback((state: BookState) => {
+    // First, and at once: the cover globe holds still from the moment the cover moves.
+    coverRef.current?.onStateChange(state);
     // Not urgent: the book has already put itself in the new state. Keeps the first frame of the swing free.
     startTransition(() => {
       setBookState(state);
@@ -701,6 +749,44 @@ export function Demo() {
     });
     if (stateWaiter.current?.state === state) stateWaiter.current.resolve();
   }, []);
+
+  /* ------------------------- the cover globe ------------------------- */
+
+  /** The passport has opened on an island from the cover: its locator pulses, its stamps are ringed. */
+  const onCoverArrive = useCallback((stop: CoverStop) => {
+    locateRef.current(stop.id);
+    window.clearTimeout(arrivedTimer.current);
+    startTransition(() => setArrived(stop.slotIds));
+    arrivedTimer.current = window.setTimeout(() => startTransition(() => setArrived([])), 2300);
+  }, []);
+  useEffect(() => () => window.clearTimeout(arrivedTimer.current), []);
+
+  const coverBusy = useCallback(() => busyRef.current !== null, []);
+  const cover = useCoverBook({
+    passport,
+    pages: PAGE_MAP.islands,
+    book,
+    root: floatRef,
+    direction,
+    reduced,
+    // The map engine follows the device setting whatever the visitor chose here.
+    reducedTour: systemReduced,
+    travel: ensureAt,
+    isBusy: coverBusy,
+    onArrive: onCoverArrive,
+  });
+  coverRef.current = cover;
+  const coverFace = useMemo(
+    () => <CoverGlobeFace controller={cover.controller} province={SAMPLE_PASSPORT.province} />,
+    [cover.controller],
+  );
+  const onFlipStart = useCallback(
+    (index: number) => {
+      pageStore.set(index);
+      coverRef.current?.onFlipStart(index);
+    },
+    [pageStore],
+  );
 
   /* --------------------------- the story --------------------------- */
 
@@ -1119,9 +1205,10 @@ export function Demo() {
       const stamp = findSlot(passport, id)?.stamp;
       if (stamp) overrides[id] = { after: fleckFor(stamp) };
     }
+    for (const id of arrived) overrides[id] = { ...overrides[id], highlight: true };
     if (inline && inlineRender) overrides[inline.slotId] = { ...overrides[inline.slotId], render: inlineRender };
     return overrides;
-  }, [fresh, passport, inline, inlineRender, fleckFor]);
+  }, [fresh, arrived, passport, inline, inlineRender, fleckFor]);
 
   const onEmptySlotSelect = useCallback((slot: { id: string }) => void collect(slot.id), [collect]);
   /** The map hand-off: an island tapped on the Province page riffles the passport to its page. */
@@ -1148,10 +1235,12 @@ export function Demo() {
     layout: wide ? "spread" : "single",
     pageWidth: 338,
     coverInteractive: coverIdle,
+    coverGlobe: coverFace,
     onEmptySlotSelect,
     onIslandSelect,
   });
   closeStampRef.current = built.closeStamp;
+  locateRef.current = built.locateIsland;
 
   const pageCount = built.pageMap.count;
   const pages = live ? built.pages : emptyPages(pageCount);
@@ -1189,17 +1278,34 @@ export function Demo() {
   const open = bookState === "open";
 
   const blockKeys = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") coverRef.current?.prepare();
     if (!blockedRef.current || !NAV_KEYS.has(e.key)) return;
     e.stopPropagation();
     if (e.key !== "Escape") e.preventDefault();
   };
 
+  const needsWarmUp = !(live && moments);
   const touchCover = useCallback(() => {
+    // The closed book is about to be opened by hand: the pages under the cover are put two
+    // before the island the globe is showing, so the book opens with a short riffle to it.
+    coverRef.current?.prepare();
+    if (!needsWarmUp) return;
     // Not urgent: the first 150 ms of the cover's swing show nothing of the pages, and rendering
     // them inside the pointer handler used to hold the first frame back.
     startTransition(() => setLive(true));
     warm();
+  }, [needsWarmUp, warm]);
+  const openFromCta = useCallback(() => {
+    startTransition(() => setLive(true));
+    warm();
+    coverRef.current?.open();
   }, [warm]);
+
+  /** The "Close" word in the hint row. A story step that is playing keeps the book. */
+  const closeFromHint = useCallback(() => {
+    if (busyRef.current !== null) return;
+    book.current?.close();
+  }, []);
 
   const playFullMotion = useCallback(() => setFullMotion(true), []);
 
@@ -1240,7 +1346,7 @@ export function Demo() {
           ref={stageRef}
           className="ipd-stage"
           onKeyDownCapture={blockKeys}
-          onPointerDownCapture={live && moments ? undefined : touchCover}
+          onPointerDownCapture={touchCover}
           onFocusCapture={live ? undefined : touchCover}
         >
           <div className="ipd-glow" aria-hidden="true" />
@@ -1254,7 +1360,8 @@ export function Demo() {
               chrome="bare"
               reducedMotion={motionOverride}
               onFlip={onFlip}
-              onFlipStart={pageStore.set}
+              onFlipStart={onFlipStart}
+              onOpenChange={cover.onOpenChange}
               onStateChange={onStateChange}
             />
           </div>
@@ -1275,6 +1382,9 @@ export function Demo() {
           onFullMotion={playFullMotion}
           pulse={hydrated && !reduced}
           pageCount={pageCount}
+          cover={cover.controller}
+          onOpenCover={openFromCta}
+          onCloseBook={closeFromHint}
         />
 
         <footer className="ipd-foot">

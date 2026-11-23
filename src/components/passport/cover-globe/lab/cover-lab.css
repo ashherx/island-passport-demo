@@ -1,0 +1,125 @@
+/* /lab/passport-cover. Prefix: ipcl-. */
+
+.ipcl {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  color: var(--fg);
+  font-family: var(--ff-body);
+  overflow-x: clip;
+}
+
+.ipcl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px 6px;
+}
+
+.ipcl-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.ipcl-intro {
+  margin: 2px 0 0;
+  max-width: 44ch;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--fg-muted);
+}
+
+.ipcl-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 0;
+}
+
+.ipcl-stage {
+  width: 100%;
+}
+
+.ipcl .ipcl-book {
+  --ipb-pad: 16px;
+  --ipb-margin: 24px;
+  --ipb-max-h: clamp(300px, calc(100svh - 300px), 620px);
+}
+
+.ipcl-under {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.ipcl-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px auto 0;
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  width: min(100%, 560px);
+}
+
+.ipcl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ipcl-label {
+  margin-right: 4px;
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+
+.ipcl-chip {
+  height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.ipcl-chip[data-on] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ipcl-chip:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.ipcl-state,
+.ipcl-note {
+  margin: 0;
+  font-family: var(--ff-mono);
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--fg-muted);
+}
+
+.ipcl-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

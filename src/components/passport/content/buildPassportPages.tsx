@@ -139,6 +139,7 @@ export function buildPassportPages(
       interactive={opts.coverInteractive ?? true}
       pageEdge={opts.coverPageEdge}
       initialWidth={opts.pageWidth}
+      globe={opts.coverGlobe}
     />
   );
   const backCover = <BackCover pageEdge={opts.coverPageEdge} initialWidth={opts.pageWidth} />;
@@ -152,6 +153,11 @@ export interface UsePassportContentResult extends PassportContent {
   /** Open the detail sheet for a slot (no-op when the slot is empty) or for the Provincial Stamp. */
   openStamp(slotId: string): void;
   closeStamp(): void;
+  /**
+   * Pulse the locator on an island's page once, as when the reader jumps to it from the province
+   * page. Used by the cover globe when the passport opens on an island.
+   */
+  locateIsland(islandId: string): void;
   /** Stamp currently shown in the sheet. */
   selected: Stamp | null;
 }
@@ -184,12 +190,15 @@ export function usePassportContent(data: PassportData, opts: BuildPassportOption
     setArrival((prev) => ({ islandId, n: (prev?.n ?? 0) + 1 }));
     latest.current.onIslandSelect?.(islandId);
   }, []);
+  const locateIsland = useCallback((islandId: string) => {
+    setArrival((prev) => ({ islandId, n: (prev?.n ?? 0) + 1 }));
+  }, []);
   const closeStamp = useCallback(() => setSelectedId(null), []);
   const openStamp = useCallback((slotId: string) => setSelectedId(slotId), []);
 
   const hasEmptyHandler = Boolean(opts.onEmptySlotSelect);
   const hasIslandHandler = Boolean(opts.onIslandSelect);
-  const { slotOverrides, layout, pageWidth, coverInteractive, coverPageEdge } = opts;
+  const { slotOverrides, layout, pageWidth, coverInteractive, coverPageEdge, coverGlobe } = opts;
   const content = useMemo(
     () =>
       buildPassportPages(
@@ -200,6 +209,7 @@ export function usePassportContent(data: PassportData, opts: BuildPassportOption
           pageWidth,
           coverInteractive,
           coverPageEdge,
+          coverGlobe,
           onStampSelect,
           onProvincialSelect,
           onEmptySlotSelect: hasEmptyHandler ? onEmptySlotSelect : undefined,
@@ -214,6 +224,7 @@ export function usePassportContent(data: PassportData, opts: BuildPassportOption
       pageWidth,
       coverInteractive,
       coverPageEdge,
+      coverGlobe,
       onStampSelect,
       onProvincialSelect,
       onEmptySlotSelect,
@@ -232,5 +243,5 @@ export function usePassportContent(data: PassportData, opts: BuildPassportOption
 
   const sheet = <StampDetailSheet stamp={selected} onClose={closeStamp} province={data.province} />;
 
-  return { ...content, sheet, openStamp, closeStamp, selected };
+  return { ...content, sheet, openStamp, closeStamp, locateIsland, selected };
 }

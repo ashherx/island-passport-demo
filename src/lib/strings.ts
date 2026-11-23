@@ -428,12 +428,14 @@ export const strings = {
   /** The composed demo on the home page (src/components/demo). */
   demo: {
     eyebrow: "Sample concept demo",
-    intro: "Passport, page-flip, stamping, upgrade and award. The map fly-to is outside this demo.",
+    intro: "The globe on the cover tours the islands you hold stamps for. Spin it, or open to the island it shows.",
     hintOpen: "Tap the passport to open it",
     hintSwipe: "Swipe to turn",
     hintStamp: "Tap a stamp",
     hintEmpty: "Tap an empty slot",
     hintBack: "Tap to turn it back over",
+    /** In the hint row while the passport is open: closes it, back to the cover globe. */
+    close: "Close",
     pageOf: "{page} / {total}",
     /** Two pages lie open (the desktop spread). */
     pagesOf: "{from}-{to} / {total}",
@@ -496,6 +498,52 @@ export const strings = {
     reducedOn: "Reduced motion is on: gentle fades only.",
     /** Beside reducedOn, before the book is first opened: play the demo with its full motion once. */
     playFull: "Play full motion",
+  },
+
+  /** The live globe on the passport's front cover (src/components/passport/cover-globe). */
+  coverGlobe: {
+    /** Accessible name of the globe window. */
+    globeLabel: "Globe of the islands in this passport. Drag to spin, tap an island to select it.",
+    /** Small line under the globe while the camera rests on the whole planet. */
+    restLine: "Environmental stamps",
+    /** Small line under the globe while it visits an island: status, then how many stamps. */
+    stampLine: "{status} · {n} of {total}",
+    stampLineShort: "{status}",
+    /** The affordance under the book. */
+    openTo: "Open to {island}",
+    open: "Open passport",
+    /** Announced politely when the tour moves on. */
+    nowShowing: "Globe: {island}, {status}, {n} of {total} stamps.",
+    /** The row of dots under the caption: one per island with a stamp. */
+    stopsLabel: "Islands with stamps",
+    stopLabel: "{island}: {status}, {n} of {total} stamps",
+    /** Sponsor strip. Every name here is invented for the demo. */
+    partnersLabel: "In partnership with",
+    partnersAria: "Sample partners: {names}",
+    partners: [
+      { id: "vtb", name: "Visayas Tourism Board", short: "Visayas Tourism Board" },
+      { id: "coral", name: "Coral Trust", short: "Coral Trust" },
+      { id: "dive", name: "Bohol Dive Co.", short: "Bohol Dive Co." },
+    ],
+    partnersNote: "Sample partners. Names and marks are invented.",
+    /** Credit for the map inside the cover: a "©" beside the open button that opens to this line. */
+    mapCreditLabel: "Map credits",
+    mapCreditLead: "Map ©",
+    mapCreditData: "OpenStreetMap contributors",
+    mapCreditTiles: "OpenFreeMap",
+    /** Lab page. */
+    lab: {
+      title: "Passport cover lab",
+      intro: "The cover globe, its tour and the open-to-island transition, in the three art directions.",
+      direction: "Direction",
+      island: "Island",
+      open: "Open to island",
+      close: "Close",
+      tourOn: "Tour running",
+      tourOff: "Tour paused",
+      reduced: "Reduced motion",
+      state: "State",
+    },
   },
 } as const;
 

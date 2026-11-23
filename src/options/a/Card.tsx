@@ -9,12 +9,15 @@
  * takes a donation.
  */
 import Link from "next/link";
-import { memo, useCallback, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from "react";
-import { Photo } from "@/components/options-ui";
+import { createContext, memo, useCallback, useContext, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent, type ReactNode, type RefObject } from "react";
+import { Photo, type PhotoProps } from "@/components/options-ui";
 import {
   FEATURED_ISLAND_ID,
   getIsland,
+  hasPhoto,
   islandStrings,
+  photoAspect,
+  photoAsset,
   isLive,
   type ComingSoonIsland,
   type GlobeIsland,
@@ -24,8 +27,12 @@ import {
   type StampPartner,
 } from "@/lib/islands";
 import { t } from "@/lib/strings";
+import { HERO_SIZES, lowSource } from "./photos";
 import { aStrings } from "./strings";
 import { Bar, IucnBadge, Ring, Seen, StampMark, TrendMark } from "./viz";
+
+/** Where the lead photo is anchored when its frame crops it. */
+const HERO_POSITION = "50% 60%";
 
 export type CardView = "map" | "photos";
 
@@ -53,10 +60,13 @@ export interface CardHeadProps {
   onClose(): void;
   /** The camera is still on its way: show the travelling line instead of the status. */
   flying: boolean;
+  /** The docked card (wide screens, layouts with the card along the bottom) can be made taller. */
+  expanded?: boolean;
+  onToggleExpanded?(): void;
 }
 
 /** Name, place, status, the Map | Photos toggle and the close button. Also the sheet's drag area. */
-export function CardHead({ island, headingId, headingRef, view, onView, onClose, flying }: CardHeadProps) {
+export function CardHead({ island, headingId, headingRef, view, onView, onClose, flying, expanded, onToggleExpanded }: CardHeadProps) {
   const live = isLive(island);
   return (
     <header className="da-head" data-drag="">
@@ -85,6 +95,13 @@ export function CardHead({ island, headingId, headingRef, view, onView, onClose,
               </button>
             </div>
           ) : null}
+          {onToggleExpanded ? (
+            <button type="button" className="da-close da-grow" onClick={onToggleExpanded} aria-expanded={Boolean(expanded)} aria-label={expanded ? aStrings.card.collapse : aStrings.card.expand}>
+              <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <path d="M4 9.800 8 5.800l4 4" fill="none" stroke="currentColor" strokeWidth="1.700" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          ) : null}
           <button type="button" className="da-close" onClick={onClose} aria-label={islandStrings.globe.reset}>
             <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
               <path d="M4.2 4.2l7.6 7.6M11.8 4.2l-7.6 7.6" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -98,6 +115,65 @@ export function CardHead({ island, headingId, headingRef, view, onView, onClose,
       <p className="da-place">{placeOf(island)}</p>
     </header>
   );
+}
+
+/* ------------------------------------------------------------------ hero */
+
+/**
+ * The island's lead photo with three figures at a glance: the top of the card.
+ *
+ * Three layers, so the area is never empty. At the bottom the photo's own tint and blurred
+ * preview, painted with the markup. Over it the sharp photo, which fades in when it has loaded.
+ * On top the narrow rendition (.da-hero-lo, a few tens of KB that photos.ts fetches as soon as an
+ * island is chosen): it is what the card lands with while the sharp photo is still on its way,
+ * and it goes once the sharp one under it is opaque (atlas.css).
+ */
+export function CardHero({ island }: { island: LiveIsland }) {
+  const { card } = island;
+  const low = lowSource(card.hero.name);
+  return (
+    <div className="da-hero da-rise" data-empty={hasPhoto(card.hero.name) ? undefined : ""} style={{ "--i": 0 } as CSSProperties}>
+      <Photo name={card.hero.name} alt={card.hero.alt} aspect="fill" sizes={HERO_SIZES} priority position={HERO_POSITION} />
+      {low ? (
+        // eslint-disable-next-line @next/next/no-img-element -- a pre-sized WebP from our own pipeline, shown under the same crop as the photo
+        <img className="da-hero-lo" src={low} alt="" aria-hidden="true" decoding="async" fetchPriority="high" style={{ objectPosition: HERO_POSITION }} />
+      ) : null}
+      <ul className="da-glance" aria-label={aStrings.card.facts}>
+        <li>
+          <Ring value={card.reef.healthIndex.value} max={card.reef.healthIndex.max} size={18} stroke={3} label="" tone="light" />
+          {t(aStrings.glance.reef, { value: card.reef.healthIndex.value })}
+        </li>
+        <li>{t(aStrings.glance.species, { n: card.species.length })}</li>
+        <li>{t(aStrings.glance.stamps, { n: card.partners.length })}</li>
+      </ul>
+      <span className="da-hero-caption">{card.hero.caption}</span>
+      <span className="da-hero-sample">{islandStrings.sample.photo}</span>
+    </div>
+  );
+}
+
+/* ------------------------------------------------- pictures in the body */
+
+/**
+ * The card's body is mounted during the flight, out of sight, and its pictures (the photo strip,
+ * the wildlife and the projects) would start downloading then: half a dozen files racing the
+ * card's lead photo and the map's tiles on a phone connection. They wait for the camera to land.
+ * Until then each one is its own frame with the photo's tint and blurred preview, so nothing
+ * moves when the picture arrives.
+ */
+const PicturesReady = createContext(true);
+
+function BodyPhoto(props: PhotoProps) {
+  const ready = useContext(PicturesReady);
+  if (ready) return <Photo {...props} />;
+  const asset = photoAsset(props.name);
+  const fill = props.aspect === "fill";
+  const frame: CSSProperties = {
+    ...(fill ? null : { aspectRatio: String(props.aspect ?? photoAspect(props.name)) }),
+    ...(asset ? { backgroundColor: asset.color, backgroundImage: `url(${asset.blur})` } : null),
+    ...props.style,
+  };
+  return <span className={props.className ? `ipp ${props.className}` : "ipp"} data-fill={fill ? "" : undefined} aria-hidden="true" style={frame} />;
 }
 
 /* ------------------------------------------------------------- sections */
@@ -199,9 +275,11 @@ export interface CardBodyProps {
   /** The card can scroll (full sheet, side panel). Otherwise a tab first asks for it to open. */
   expanded: boolean;
   onExpand(): void;
+  /** The camera has landed: the body's pictures may load (see `BodyPhoto`). */
+  pictures: boolean;
 }
 
-export const CardBody = memo(function CardBody({ island, scrollerRef, onOpenPhoto, expanded, onExpand }: CardBodyProps) {
+export const CardBody = memo(function CardBody({ island, scrollerRef, onOpenPhoto, expanded, onExpand, pictures }: CardBodyProps) {
   const { card } = island;
   const uid = useId();
   const sectionId = (id: SectionId) => `${uid}-${id}`;
@@ -280,207 +358,214 @@ export const CardBody = memo(function CardBody({ island, scrollerRef, onOpenPhot
     nav.scrollTo({ left, behavior: "smooth" });
   }, [active]);
 
+  // Once this island's pictures have been let in they stay (the card closing must not swap them
+  // back for their placeholders on its way out).
+  const [picturesFor, setPicturesFor] = useState<string | null>(pictures ? island.id : null);
+  if (pictures && picturesFor !== island.id) setPicturesFor(island.id);
+
   return (
-    <div className="da-body">
-      <nav className="da-tabs" aria-label={aStrings.card.navLabel}>
-        <div className="da-tabs-row" ref={navRef} data-hscroll="">
-          {SECTION_IDS.map((id) => (
-            <button key={id} type="button" className="da-tab" data-tab={id} aria-current={active === id ? "true" : undefined} onClick={() => go(id)}>
-              {aStrings.card.nav[id]}
-            </button>
-          ))}
-        </div>
-      </nav>
-
-      {/* 1. Description and photos */}
-      <Section id={sectionId("about")} title={islandStrings.card.sections.about} index={0}>
-        <p className="da-lede">{card.description.headline}</p>
-        {card.description.body.map((paragraph, i) => (
-          <p key={i} className="da-copy">
-            {paragraph}
-          </p>
-        ))}
-        <dl className="da-facts" aria-label={aStrings.card.facts}>
-          {card.description.facts.map((fact) => (
-            <div key={fact.label} className="da-fact">
-              <dt>{fact.label}</dt>
-              <dd>{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
-        <ul className="da-strip" data-hscroll="" aria-label={aStrings.card.gallery}>
-          {gallery.map((photo, i) => (
-            <li key={photo.name}>
-              <button type="button" className="da-strip-item" onClick={() => onOpenPhoto(i)} aria-label={t(aStrings.card.openPhoto, { caption: photo.caption })}>
-                <Photo name={photo.name} alt="" aspect={4 / 3} sizes="160px" />
-                <span className="da-strip-caption">{photo.caption}</span>
+    <PicturesReady.Provider value={picturesFor === island.id}>
+      <div className="da-body">
+        <nav className="da-tabs" aria-label={aStrings.card.navLabel}>
+          <div className="da-tabs-row" ref={navRef} data-hscroll="">
+            {SECTION_IDS.map((id) => (
+              <button key={id} type="button" className="da-tab" data-tab={id} aria-current={active === id ? "true" : undefined} onClick={() => go(id)}>
+                {aStrings.card.nav[id]}
               </button>
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      {/* 2. Tourism impact */}
-      <Section id={sectionId("tourism")} title={islandStrings.card.sections.tourism} kicker={islandStrings.sample.data} index={1}>
-        <p className="da-copy">{card.tourism.summary}</p>
-        <ul className="da-stats">
-          {card.tourism.stats.map((metric) => (
-            <StatTile key={metric.id} metric={metric} />
-          ))}
-        </ul>
-        <div className="da-duo">
-          <div className="da-list" data-tone="sun">
-            <h4>{aStrings.card.pressures}</h4>
-            <ul>
-              {card.tourism.pressures.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+            ))}
           </div>
-          <div className="da-list" data-tone="sea">
-            <h4>{aStrings.card.tips}</h4>
-            <ul>
-              {card.tourism.tips.map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </Section>
+        </nav>
 
-      {/* 3. Endangered species */}
-      <Section id={sectionId("species")} title={islandStrings.card.sections.species} index={2}>
-        <ul className="da-species" data-hscroll="">
-          {card.species.map((species) => (
-            <li key={species.id} className="da-creature">
-              <div className="da-creature-art">
-                {species.photo ? (
-                  <Photo name={species.photo} alt="" aspect="fill" sizes="220px" />
-                ) : (
-                  <span className="da-creature-blank" aria-hidden="true" />
-                )}
-                <span className="da-creature-code" data-iucn={species.iucn} aria-hidden="true">
-                  {species.iucn}
-                </span>
-              </div>
-              <div className="da-creature-text">
-                <p className="da-creature-name">{species.name}</p>
-                <p className="da-creature-sci">{species.scientific}</p>
-                <IucnBadge status={species.iucn} />
-                <p className="da-creature-note">{species.note}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      {/* 4. Water quality and reef */}
-      <Section id={sectionId("reef")} title={islandStrings.card.sections.reef} kicker={t(islandStrings.card.reefUpdated, { date: card.reef.updated })} index={3}>
-        <div className="da-reef">
-          <Ring value={card.reef.healthIndex.value} max={card.reef.healthIndex.max} size={124} stroke={10} label={`${islandStrings.card.reefIndex}: ${card.reef.healthIndex.value} / ${card.reef.healthIndex.max}`}>
-            <span className="da-reef-score">{card.reef.healthIndex.value}</span>
-            <span className="da-reef-max">/ {card.reef.healthIndex.max}</span>
-          </Ring>
-          <div className="da-reef-text">
-            <p className="da-reef-kicker">{islandStrings.card.reefIndex}</p>
-            <p className="da-reef-label">{card.reef.healthIndex.label}</p>
-            <p className="da-reef-trend">
-              <TrendMark trend={card.reef.healthIndex.trend} />
-              {islandStrings.trend[card.reef.healthIndex.trend]}
+        {/* 1. Description and photos */}
+        <Section id={sectionId("about")} title={islandStrings.card.sections.about} index={0}>
+          <p className="da-lede">{card.description.headline}</p>
+          {card.description.body.map((paragraph, i) => (
+            <p key={i} className="da-copy">
+              {paragraph}
             </p>
-          </div>
-        </div>
-        <p className="da-copy">{card.reef.summary}</p>
-        <ul className="da-metrics">
-          {card.reef.metrics.map((metric) => (
-            <MetricRow key={metric.id} metric={metric} />
           ))}
-        </ul>
-        <p className="da-fine">{islandStrings.sample.figures}</p>
-      </Section>
+          <dl className="da-facts" aria-label={aStrings.card.facts}>
+            {card.description.facts.map((fact) => (
+              <div key={fact.label} className="da-fact">
+                <dt>{fact.label}</dt>
+                <dd>{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <ul className="da-strip" data-hscroll="" aria-label={aStrings.card.gallery}>
+            {gallery.map((photo, i) => (
+              <li key={photo.name}>
+                <button type="button" className="da-strip-item" onClick={() => onOpenPhoto(i)} aria-label={t(aStrings.card.openPhoto, { caption: photo.caption })}>
+                  <BodyPhoto name={photo.name} alt="" aspect={4 / 3} sizes="160px" />
+                  <span className="da-strip-caption">{photo.caption}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </Section>
 
-      {/* 5. Conservation projects */}
-      <Section id={sectionId("projects")} title={islandStrings.card.sections.projects} index={4}>
-        <ul className="da-projects">
-          {card.projects.map((project) => (
-            <li key={project.id} className="da-project">
-              {project.photo ? (
-                <div className="da-project-photo">
-                  <Photo name={project.photo} alt="" aspect="fill" sizes="96px" />
+        {/* 2. Tourism impact */}
+        <Section id={sectionId("tourism")} title={islandStrings.card.sections.tourism} kicker={islandStrings.sample.data} index={1}>
+          <p className="da-copy">{card.tourism.summary}</p>
+          <ul className="da-stats">
+            {card.tourism.stats.map((metric) => (
+              <StatTile key={metric.id} metric={metric} />
+            ))}
+          </ul>
+          <div className="da-duo">
+            <div className="da-list" data-tone="sun">
+              <h4>{aStrings.card.pressures}</h4>
+              <ul>
+                {card.tourism.pressures.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="da-list" data-tone="sea">
+              <h4>{aStrings.card.tips}</h4>
+              <ul>
+                {card.tourism.tips.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Section>
+
+        {/* 3. Endangered species */}
+        <Section id={sectionId("species")} title={islandStrings.card.sections.species} index={2}>
+          <ul className="da-species" data-hscroll="">
+            {card.species.map((species) => (
+              <li key={species.id} className="da-creature">
+                <div className="da-creature-art">
+                  {species.photo ? (
+                    <BodyPhoto name={species.photo} alt="" aspect="fill" sizes="220px" />
+                  ) : (
+                    <span className="da-creature-blank" aria-hidden="true" />
+                  )}
+                  <span className="da-creature-code" data-iucn={species.iucn} aria-hidden="true">
+                    {species.iucn}
+                  </span>
                 </div>
-              ) : null}
-              <div className="da-project-text">
-                <p className="da-project-title">{project.title}</p>
-                <p className="da-project-org">{t(islandStrings.card.by, { organisation: project.organisation })}</p>
-                <p className="da-project-summary">{project.summary}</p>
-                {project.progress ? (
-                  <div className="da-progress">
-                    <Bar value={project.progress.value} max={project.progress.target} />
-                    <p className="da-progress-text">{project.progress.display}</p>
+                <div className="da-creature-text">
+                  <p className="da-creature-name">{species.name}</p>
+                  <p className="da-creature-sci">{species.scientific}</p>
+                  <IucnBadge status={species.iucn} />
+                  <p className="da-creature-note">{species.note}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        {/* 4. Water quality and reef */}
+        <Section id={sectionId("reef")} title={islandStrings.card.sections.reef} kicker={t(islandStrings.card.reefUpdated, { date: card.reef.updated })} index={3}>
+          <div className="da-reef">
+            <Ring value={card.reef.healthIndex.value} max={card.reef.healthIndex.max} size={124} stroke={10} label={`${islandStrings.card.reefIndex}: ${card.reef.healthIndex.value} / ${card.reef.healthIndex.max}`}>
+              <span className="da-reef-score">{card.reef.healthIndex.value}</span>
+              <span className="da-reef-max">/ {card.reef.healthIndex.max}</span>
+            </Ring>
+            <div className="da-reef-text">
+              <p className="da-reef-kicker">{islandStrings.card.reefIndex}</p>
+              <p className="da-reef-label">{card.reef.healthIndex.label}</p>
+              <p className="da-reef-trend">
+                <TrendMark trend={card.reef.healthIndex.trend} />
+                {islandStrings.trend[card.reef.healthIndex.trend]}
+              </p>
+            </div>
+          </div>
+          <p className="da-copy">{card.reef.summary}</p>
+          <ul className="da-metrics">
+            {card.reef.metrics.map((metric) => (
+              <MetricRow key={metric.id} metric={metric} />
+            ))}
+          </ul>
+          <p className="da-fine">{islandStrings.sample.figures}</p>
+        </Section>
+
+        {/* 5. Conservation projects */}
+        <Section id={sectionId("projects")} title={islandStrings.card.sections.projects} index={4}>
+          <ul className="da-projects">
+            {card.projects.map((project) => (
+              <li key={project.id} className="da-project">
+                {project.photo ? (
+                  <div className="da-project-photo">
+                    <BodyPhoto name={project.photo} alt="" aspect="fill" sizes="96px" />
                   </div>
                 ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </Section>
+                <div className="da-project-text">
+                  <p className="da-project-title">{project.title}</p>
+                  <p className="da-project-org">{t(islandStrings.card.by, { organisation: project.organisation })}</p>
+                  <p className="da-project-summary">{project.summary}</p>
+                  {project.progress ? (
+                    <div className="da-progress">
+                      <Bar value={project.progress.value} max={project.progress.target} />
+                      <p className="da-progress-text">{project.progress.display}</p>
+                    </div>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
 
-      {/* 6. Charities and other partners offering stamps */}
-      <Section id={sectionId("partners")} title={islandStrings.card.sections.partners} index={5}>
-        <p className="da-copy">{islandStrings.card.partnersIntro}</p>
-        <div className="da-ladder">
-          <p className="da-ladder-title">{aStrings.card.ladderTitle}</p>
-          <p className="da-ladder-body">{aStrings.card.ladderBody}</p>
-          <ol className="da-ladder-steps">
-            {(["stamp", "tourism-seal", "government-seal"] as const).map((kind, i) => {
-              const sample = card.partners.find((p) => p.offer.kind === kind);
-              if (!sample) return null;
-              return (
-                <li key={kind} data-kind={kind} style={{ "--step": i } as CSSProperties}>
-                  <span className="da-ladder-amount">{sample.offer.threshold.display}</span>
-                  <span className="da-ladder-kind">{islandStrings.offerKind[kind]}</span>
-                </li>
-              );
-            })}
-          </ol>
-          <p className="da-fine">{islandStrings.sample.thresholds}</p>
-        </div>
+        {/* 6. Charities and other partners offering stamps */}
+        <Section id={sectionId("partners")} title={islandStrings.card.sections.partners} index={5}>
+          <p className="da-copy">{islandStrings.card.partnersIntro}</p>
+          <div className="da-ladder">
+            <p className="da-ladder-title">{aStrings.card.ladderTitle}</p>
+            <p className="da-ladder-body">{aStrings.card.ladderBody}</p>
+            <ol className="da-ladder-steps">
+              {(["stamp", "tourism-seal", "government-seal"] as const).map((kind, i) => {
+                const sample = card.partners.find((p) => p.offer.kind === kind);
+                if (!sample) return null;
+                return (
+                  <li key={kind} data-kind={kind} style={{ "--step": i } as CSSProperties}>
+                    <span className="da-ladder-amount">{sample.offer.threshold.display}</span>
+                    <span className="da-ladder-kind">{islandStrings.offerKind[kind]}</span>
+                  </li>
+                );
+              })}
+            </ol>
+            <p className="da-fine">{islandStrings.sample.thresholds}</p>
+          </div>
 
-        <h4 className="da-subhead">{aStrings.card.stamps}</h4>
-        <ul className="da-partners">
-          {stamps.map((partner, i) => (
-            <PartnerRow key={partner.id} partner={partner} index={i} />
-          ))}
-        </ul>
-        {seals.length ? (
-          <>
-            <h4 className="da-subhead">{aStrings.card.seals}</h4>
-            <ul className="da-partners">
-              {seals.map((partner, i) => (
-                <PartnerRow key={partner.id} partner={partner} index={i + stamps.length} />
-              ))}
-            </ul>
-          </>
-        ) : null}
+          <h4 className="da-subhead">{aStrings.card.stamps}</h4>
+          <ul className="da-partners">
+            {stamps.map((partner, i) => (
+              <PartnerRow key={partner.id} partner={partner} index={i} />
+            ))}
+          </ul>
+          {seals.length ? (
+            <>
+              <h4 className="da-subhead">{aStrings.card.seals}</h4>
+              <ul className="da-partners">
+                {seals.map((partner, i) => (
+                  <PartnerRow key={partner.id} partner={partner} index={i + stamps.length} />
+                ))}
+              </ul>
+            </>
+          ) : null}
 
-        <p className="da-assure">
-          <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
-            <path d="M10 2.2 3.6 4.6v4.7c0 4 2.7 7.2 6.4 8.5 3.700-1.3 6.4-4.5 6.4-8.5V4.600z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-            <path d="m7.200 10 2 2 3.600-3.900" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          <span>
-            {islandStrings.sample.donationPlatform} {islandStrings.sample.noDonations}
-          </span>
-        </p>
-      </Section>
+          <p className="da-assure">
+            <svg viewBox="0 0 20 20" aria-hidden="true" focusable="false">
+              <path d="M10 2.2 3.6 4.6v4.7c0 4 2.7 7.2 6.4 8.5 3.700-1.3 6.4-4.5 6.4-8.5V4.600z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              <path d="m7.200 10 2 2 3.600-3.900" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span>
+              {islandStrings.sample.donationPlatform} {islandStrings.sample.noDonations}
+            </span>
+          </p>
+        </Section>
 
-      <footer className="da-foot">
-        <p>{islandStrings.sample.notice}</p>
-        <Link href="/passport" className="da-foot-link">
-          {aStrings.card.passportLink}
-        </Link>
-      </footer>
-    </div>
+        <footer className="da-foot">
+          <p>{islandStrings.sample.notice}</p>
+          <Link href="/passport" className="da-foot-link">
+            {aStrings.card.passportLink}
+          </Link>
+        </footer>
+      </div>
+    </PicturesReady.Provider>
   );
 });
 

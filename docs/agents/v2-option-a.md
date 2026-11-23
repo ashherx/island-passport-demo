@@ -1,5 +1,7 @@
 # v2 option A handoff: "Daylight Atlas"
 
+> **Update.** The landing now has layouts ("split" is the arrangement described here, "horizon" is the default, "orb" is the centred small planet, "fullbleed" is the map as the whole page), a "Layout" pill replaces the A · B · C pill (which needs `?themes=1`), and `index.tsx` is a layout-agnostic shell. See `docs/agents/v2-layouts.md`. Everything below about the look, the card and the map style still holds; the layout numbers and the open and close sequence described here are the split layout's (`src/options/a/layouts/split.tsx`).
+
 Bright, airy travel atlas: a pale sky, a sunlit globe with warm sand land and sky-blue sea, turquoise participating islands, a frosted white island card. Display type is Instrument Serif, everything else DM Sans (both loaded by this option only).
 
 ## Where to look

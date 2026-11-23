@@ -31,14 +31,20 @@ function template(map: MapLibreMap): string | null {
   return null;
 }
 
-export function warmTiles(map: MapLibreMap | null, island: GlobeIsland): void {
-  if (!map || warmed.has(island.id)) return;
+/**
+ * `tilted`: the camera lands looking across the island at an angle (LayoutModule.islandView). It
+ * then sees a good deal of ground beyond the island, toward and away from itself, so at the two
+ * levels nearest the landing the tiles on every side of the island's own are fetched as well.
+ */
+export function warmTiles(map: MapLibreMap | null, island: GlobeIsland, tilted = false): void {
+  const key = tilted ? `${island.id}:tilted` : island.id;
+  if (!map || warmed.has(key)) return;
   // Respect a visitor who asked their browser to save data.
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
   if (connection?.saveData) return;
   const url = template(map);
   if (!url) return;
-  warmed.add(island.id);
+  warmed.add(key);
 
   const [west, south, east, north] = island.bbox;
   const span = Math.max(east - west, (north - south) * 1.1, 0.004);
@@ -50,9 +56,11 @@ export function warmTiles(map: MapLibreMap | null, island: GlobeIsland): void {
     const n = 2 ** z;
     const cx = lngToX(lng, z);
     const cy = latToY(lat, z);
-    // The tile under the island and its nearest neighbours on each axis.
-    const xs = new Set([Math.floor(cx), Math.floor(cx + (cx % 1 < 0.5 ? -1 : 1))]);
-    const ys = new Set([Math.floor(cy), Math.floor(cy + (cy % 1 < 0.5 ? -1 : 1))]);
+    // The tile under the island and its nearest neighbours on each axis (all of them, near the
+    // landing's own level, for a tilted landing).
+    const around = tilted && z >= target;
+    const xs = new Set(around ? [Math.floor(cx) - 1, Math.floor(cx), Math.floor(cx) + 1] : [Math.floor(cx), Math.floor(cx + (cx % 1 < 0.5 ? -1 : 1))]);
+    const ys = new Set(around ? [Math.floor(cy) - 1, Math.floor(cy), Math.floor(cy) + 1] : [Math.floor(cy), Math.floor(cy + (cy % 1 < 0.5 ? -1 : 1))]);
     for (const x of xs) {
       for (const y of ys) {
         if (y < 0 || y >= n) continue;

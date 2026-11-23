@@ -54,6 +54,11 @@ export interface BuildPassportOptions {
   coverInteractive?: boolean;
   /** Draw the page block along the cover's fore edge (for covers shown outside the book). */
   coverPageEdge?: boolean;
+  /**
+   * The live globe for the front cover (a <CoverGlobeFace />, see passport/cover-globe). Keep the
+   * node stable (useMemo). Without it the cover carries the printed emblem, as before.
+   */
+  coverGlobe?: ReactNode;
 }
 
 /** Where things are in `pages`. All indexes are zero-based, as PassportBookHandle.flipTo expects. */

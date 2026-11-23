@@ -1,6 +1,6 @@
 import { Demo } from "@/components/demo";
 import { textureUrl } from "@/lib/assets";
-import { DEFAULT_DIRECTION, DIRECTIONS } from "@/lib/directions";
+import { DEFAULT_DIRECTION, DIRECTIONS, STORAGE_KEYS } from "@/lib/directions";
 
 /**
  * /passport: the composed motion demo (interactive passport, the stamping moment, the status
@@ -23,9 +23,19 @@ const coverPreloadScript = `(function(){try{var d=document.documentElement.getAt
   DEFAULT_DIRECTION,
 )}];if(u&&!document.head.querySelector('link[rel="preload"][href="'+u+'"]')){var l=document.createElement("link");l.rel="preload";l.as="image";l.href=u;l.setAttribute("fetchpriority","high");document.head.appendChild(l)}}catch(x){}})();`;
 
+/**
+ * The passport is shown on the light stage unless the visitor has chosen a mode themselves (the
+ * theme boot script follows the system setting, which would put a dark-mode laptop on the dark
+ * stage). Runs after that script and before first paint; the theme provider adopts the result.
+ */
+const lightDefaultScript = `(function(){try{var m=null;try{m=localStorage.getItem(${JSON.stringify(
+  STORAGE_KEYS.mode,
+)})}catch(x){}if(m!=="light"&&m!=="dark"){var e=document.documentElement;e.setAttribute("data-theme","light");e.style.colorScheme="light"}}catch(x){}})();`;
+
 export default function PassportPage() {
   return (
     <>
+      <script id="ip-passport-light" dangerouslySetInnerHTML={{ __html: lightDefaultScript }} />
       <script id="ip-passport-preload" dangerouslySetInnerHTML={{ __html: coverPreloadScript }} />
       <Demo />
     </>

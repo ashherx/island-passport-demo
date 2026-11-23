@@ -55,6 +55,8 @@ function reliefMaxZoom(): number {
   return Math.min(window.innerWidth, window.innerHeight) >= 700 ? 3 : 2;
 }
 /** Layer that blooms around the island the camera has just landed on (driven from Landing). */
+/** The sea. */
+export const WATER_LAYER = "water";
 export const BLOOM_LAYER = "da-bloom";
 export const BLOOM_CORE_LAYER = "da-bloom-core";
 
@@ -143,7 +145,7 @@ function baseLayers(base: StyleBase): LayerSpecification[] {
       paint: { "fill-color": ATLAS.green, "fill-opacity": 0.4, "fill-antialias": false },
     },
     {
-      id: "water",
+      id: WATER_LAYER,
       type: "fill",
       source: src,
       "source-layer": "water",
