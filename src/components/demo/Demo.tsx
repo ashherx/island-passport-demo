@@ -34,6 +34,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import Link from "next/link";
 import { Header } from "@/components/chrome";
 import { vibrate } from "@/components/moments/celebrations/haptics";
 import { nudge } from "@/components/moments/stamp-press/feedback";
@@ -1264,6 +1265,15 @@ export function Demo() {
   else if (step === "award") cta = strings.actions.awardProvincial;
   else cta = D.done.cta;
 
+  /*
+   * The way into the traveler share flow (docs/agents/p3-traveler.md), once the story stamp is in
+   * the passport. It carries the stamp's status and the art direction, so the flow starts from
+   * exactly what is on the page. A plain link: leaving the page ends the story like any navigation.
+   */
+  const shareStatus = storySlot?.stamp?.status;
+  const shareHref = shareStatus ? `/share/traveler?from=passport&status=${shareStatus}&style=${direction}` : null;
+  const shareReady = shareStatus === "verified";
+
   let note: ReactNode;
   if (step === "collect") note = t(D.steps.collect.note, { title: storyStamp.title, island: storyStamp.island, promoter: storyStamp.promoter });
   else if (step === "donate") note = t(D.steps.donate.note, { charity: storyStamp.charity });
@@ -1273,6 +1283,12 @@ export function Demo() {
     // Who made this, only once the bidder has filled it in (strings.app.bidder).
     const byline = t(D.byline, { bidder: strings.app.bidder });
     note = strings.app.contactHref ? <a href={strings.app.contactHref}>{byline}</a> : byline;
+  } else if (shareHref) {
+    note = (
+      <Link href={shareHref} className="ipd-bar__share" data-share-entry="note">
+        {D.share.note}
+      </Link>
+    );
   } else note = D.done.note;
 
   const open = bookState === "open";
@@ -1405,7 +1421,27 @@ export function Demo() {
         onReplay={step !== "collect" || fresh.length > 0 ? () => void replay() : undefined}
         onIntent={warm}
         // The engine's own mute state, saved by the engine: the one switch for every sound here.
-        tools={<StampPressSoundToggle className="ipd-tool ipd-tool--sound" />}
+        tools={
+          <>
+            {shareHref && (
+              <Link
+                href={shareHref}
+                className="ipd-tool ipd-tool--share"
+                data-ready={shareReady ? "" : undefined}
+                data-share-entry="tool"
+                aria-label={D.share.aria}
+                title={D.share.aria}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M9 11.4V2.6M5.8 5.6 9 2.4l3.2 3.2" />
+                  <path d="M3.6 9.4v4.4a1.6 1.6 0 0 0 1.6 1.6h7.6a1.6 1.6 0 0 0 1.6-1.6V9.4" />
+                </svg>
+                {shareReady && <span>{D.share.label}</span>}
+              </Link>
+            )}
+            <StampPressSoundToggle className="ipd-tool ipd-tool--sound" />
+          </>
+        }
       />
 
       {built.sheet}

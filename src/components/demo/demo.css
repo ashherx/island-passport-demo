@@ -713,6 +713,43 @@ body {
   outline-offset: 2px;
 }
 
+/*
+ * The way into the traveler share flow (docs/agents/p3-traveler.md). A quiet icon while the stamp
+ * is still Discovery or pending; once the charity has confirmed it becomes a labelled pill.
+ */
+.ipd-tool--share {
+  text-decoration: none;
+  animation: ipd-hint-in 0.45s var(--ease-out-soft) both;
+}
+
+.ipd-tool--share[data-ready] {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin-right: 4px;
+  padding: 0 12px 0 9px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  box-shadow: 0 6px 14px -8px var(--accent);
+}
+
+.ipd-bar__share {
+  color: var(--accent);
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.ipd-bar__share::after {
+  content: " \2192";
+}
+
 /* The sound switch brings its own text label: keep it for screen readers only. */
 .ipd-tool--sound > span {
   position: absolute;
@@ -1470,6 +1507,9 @@ body {
   .ipd-hint__pulse::after,
   .ipd-steps__label,
   .ipd-cta__dots i {
+    animation: none !important;
+  }
+  .ipd-tool--share {
     animation: none !important;
   }
   .ipd-cta,

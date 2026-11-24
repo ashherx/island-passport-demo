@@ -480,6 +480,16 @@ export const strings = {
       /** On the button while the book closes for a replay. */
       busy: "Closing the passport",
     },
+    /**
+     * The way into the traveler share flow (/share/traveler), offered once the story stamp is
+     * collected: a small button in the bar, spelled out once the charity has confirmed.
+     */
+    share: {
+      label: "Share",
+      aria: "Share your stamp: opens the share flow",
+      /** Bar note once the story is complete. */
+      note: "Share your stamp with your own link and QR code",
+    },
     replay: "Replay demo",
     replayShort: "Restart",
     skip: "Skip the animation",
